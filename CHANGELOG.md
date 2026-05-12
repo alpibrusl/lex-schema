@@ -2,6 +2,49 @@
 
 All notable changes to lex-pydantic are tracked here.
 
+## [Unreleased] — 0.6.0
+
+### Added
+
+- `src/sdk.lex` — `ModelSchema` → client-SDK codegen.
+  - `to_typescript(schema)` emits `export interface` declarations
+    (one per nested record), with JSDoc descriptions, optional-
+    field `?:`, `StrOneOf` rendered as `"a" | "b"` union types,
+    and constraint hints in trailing `// minLength: ...` comments.
+  - `to_python(schema)` emits pydantic v2 `BaseModel` classes.
+    Constraints map to pydantic field args (`min_length`,
+    `pattern`, `ge`/`le`, `Literal[...]`). Nested classes emit
+    first so the top-level class can reference them without
+    forward declarations. Output is drop-in pydantic source.
+- `examples/15_sdk_export.lex` — one User schema produces three
+  artifacts: JSON Schema, TypeScript interfaces, pydantic
+  classes — same source of truth.
+- `examples/16_validation_service.lex` — `POST /v1/validate`
+  HTTP service that accepts `{schema, payload}` over the wire,
+  returns 200 + normalized payload on success or 422 +
+  structured `errors[]` on failure. Smoke-test entry points
+  exercise the pipeline without binding the port.
+- `examples/17_webhook_dedup.lex` — Stripe / GitHub /
+  Slack-style at-least-once delivery, deduped via SHA-256
+  idempotency key over the parser-output bytes. Threads a
+  `Set[Str]` of seen keys through the dispatch.
+- `tests/test_sdk.lex` — 12 cases (TS + Python coverage of
+  enum, optional, nested, constraint mapping).
+
+### Issues filed
+
+- [`#338`](https://github.com/alpibrusl/lex-lang/issues/338)
+  `list.sort_by[T, K]` for canonicalization / dedup pipelines.
+  Used to canonicalize JSON key order so semantically-identical
+  payloads with different key orders dedup the same.
+
+### Verified against
+
+- `lex 0.7.1`.
+- 15 of 15 test suites: 0 failures (~170 cases).
+- 17 of 17 examples run end-to-end.
+- Every `src/*.lex` module `lex check`s cleanly.
+
 ## [Unreleased] — 0.5.0
 
 ### Added

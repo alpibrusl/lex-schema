@@ -92,6 +92,7 @@ runs end-to-end. CHANGELOG carries the exact `lex --version` used.
 | `src/cli.lex`         | `std.cli` ↔ `ModelSchema` bridge (`parse_and_validate_argv`) | ~80 |
 | `src/property.lex`    | Schema-driven sample generation + round-trip property check | ~310 |
 | `src/schema_import.lex` | JSON Schema → `ModelSchema` (inverse of `to_json_schema`) | ~220 |
+| `src/sdk.lex`         | `ModelSchema` → TypeScript / Python codegen for client SDKs | ~340 |
 
 ## Install
 
@@ -296,6 +297,9 @@ All examples in `examples/` are runnable end-to-end via
 | `12_cross_field.lex`           | Cross-field rules: password match, date ordering |
 | `13_property_test.lex`         | Generate random samples from a schema, assert the round-trip property |
 | `14_json_schema_round_trip.lex` | Emit JSON Schema, parse it back, validate the same payload through both |
+| `15_sdk_export.lex`            | Generate TypeScript interfaces + Pydantic v2 classes from one schema |
+| `16_validation_service.lex`    | HTTP `/v1/validate` service accepting `{schema, payload}` over the wire |
+| `17_webhook_dedup.lex`         | SHA-256 idempotency keying on top of the discriminator pattern |
 
 Run the bad-input demos to see the full error trail:
 
@@ -322,9 +326,10 @@ lex run tests/test_cli.lex         run_all
 lex run tests/test_cross_field.lex run_all
 lex run tests/test_property.lex    run_all
 lex run tests/test_schema_import.lex run_all
+lex run tests/test_sdk.lex          run_all
 ```
 
-The suite covers ~155 cases across the thirteen modules — every
+The suite covers ~170 cases across the fourteen modules — every
 constraint's pass/fail branches, error accumulation in `combineN`,
 path manipulation, coercion, the Json ADT parser + extractors +
 round-trip, discriminated-union dispatch, and ISO 8601 bounds.
@@ -430,6 +435,8 @@ All are filed under the `lex-pydantic` label on
   constructor-pattern fail path leaks the scrutinee onto the
   stack; the symptom is an "expected Bool, got Variant{...}"
   panic far from the source when a `match` is mixed with `or`
+- [#338](https://github.com/alpibrusl/lex-lang/issues/338) —
+  `list.sort_by[T, K]` for canonicalization / dedup pipelines
 
 ## License
 
