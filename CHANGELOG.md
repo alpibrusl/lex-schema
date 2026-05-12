@@ -2,7 +2,55 @@
 
 All notable changes to lex-pydantic are tracked here.
 
-## [Unreleased] — 0.1.0
+## [Unreleased] — 0.2.0
+
+### Added
+
+- `src/coerce.lex` — string-to-typed coercion (`coerce_str_to_int`,
+  `coerce_str_to_float`, `coerce_str_to_bool`) and combined
+  coerce-plus-validate (`check_str_as_int`, ...). Map-based
+  `require_*` / `optional_*` helpers for the natural
+  query-string / form-body shape.
+- `src/json_value.lex` — first-class `Json` ADT (`JNull` / `JBool` /
+  `JInt` / `JFloat` / `JStr` / `JList` / `JObj`) and a hand-rolled
+  recursive-descent parser. Closes the runtime-safety gap for
+  untrusted input by tagging every JSON value with its actual
+  type up front; downstream `j_str` / `j_int` / `j_optional_*`
+  extractors are total over malformed inputs.
+- `src/field.lex` — optional-field variants
+  (`check_optional_str` / `_int` / `_float` / `_bool`),
+  `with_default` and `with_default_lazy` for the "field has a
+  default" pydantic pattern.
+- `examples/05_optional_and_defaults.lex` — Map-based source with
+  one optional field (stays `Option[T]`) and one defaulted field.
+- `examples/06_coerce_query_string.lex` — coercion pipeline for a
+  HTTP-style `?page=3&debug=true` query string.
+- `examples/07_safe_mode_json.lex` — Json-ADT pipeline that
+  cleanly handles malformed JSON, wrong types, and missing fields.
+- `tests/test_coerce.lex` — 12 cases covering coercion + Map
+  helpers.
+- `tests/test_json_value.lex` — 23 cases covering parser primitives,
+  containers, escapes, whitespace tolerance, malformed inputs,
+  and the path-aware extractor surface.
+
+### Issues filed
+
+- [`#328`](https://github.com/alpibrusl/lex-lang/issues/328)
+  record-alias coercion stops working under nested constructors
+  (`Result[T, MyAlias]`). Worked around with `mk_*` constructor
+  helpers in `src/json_value.lex`.
+- [`#329`](https://github.com/alpibrusl/lex-lang/issues/329)
+  negative integer literals in match patterns. Worked around by
+  binding-then-comparing in the test suite.
+
+### Verified against
+
+- `lex 0.7.1`.
+- 6 of 6 test suites: 0 failures.
+- 7 of 7 examples run end-to-end.
+- Every `src/*.lex` module `lex check`s cleanly.
+
+## [0.1.0]
 
 Initial release. Five-module pure-Lex library implementing
 pydantic-style runtime validation on top of `lex-lang`'s stdlib.

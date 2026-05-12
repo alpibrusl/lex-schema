@@ -144,6 +144,100 @@ fn check_bool(path :: Str, b :: Bool) -> Result[Bool, List[e.Error]] {
   Ok(b)
 }
 
+# ---- Optional field validators -----------------------------------
+#
+# Same `path`/`checks` contract as `check_xxx`, but the value is an
+# `Option[T]`. `None` is always Ok and returns Ok(None); `Some(v)`
+# runs the constraint list and (on success) returns `Ok(Some(v))`.
+#
+# Use these for fields where "absent" is a valid input — pydantic's
+# `Optional[T] = None`. For "absent ⇒ this default", use
+# `with_default` to lift to a non-optional first and pass through
+# the regular `check_xxx`.
+#
+# JSON⇄Option caveat: until lex-lang#322 (or the local Json ADT in
+# `parse_value.lex`, once it lands) closes the gap, `json.parse`
+# polymorphic decoding *cannot* turn a missing JSON field into
+# `None` — the typed accessor will trap on missing-field. The
+# practical sources of `Option[T]` today are `map.get`, `list.head`,
+# manual case analysis in user code, and the upcoming Json ADT.
+
+fn check_optional_str(
+  path :: Str,
+  opt :: Option[Str],
+  checks :: List[c.StrCheck]
+) -> Result[Option[Str], List[e.Error]] {
+  match opt {
+    None    => Ok(None),
+    Some(s) => match check_str(path, s, checks) {
+      Ok(v)   => Ok(Some(v)),
+      Err(es) => Err(es),
+    },
+  }
+}
+
+fn check_optional_int(
+  path :: Str,
+  opt :: Option[Int],
+  checks :: List[c.IntCheck]
+) -> Result[Option[Int], List[e.Error]] {
+  match opt {
+    None    => Ok(None),
+    Some(n) => match check_int(path, n, checks) {
+      Ok(v)   => Ok(Some(v)),
+      Err(es) => Err(es),
+    },
+  }
+}
+
+fn check_optional_float(
+  path :: Str,
+  opt :: Option[Float],
+  checks :: List[c.FloatCheck]
+) -> Result[Option[Float], List[e.Error]] {
+  match opt {
+    None    => Ok(None),
+    Some(x) => match check_float(path, x, checks) {
+      Ok(v)   => Ok(Some(v)),
+      Err(es) => Err(es),
+    },
+  }
+}
+
+fn check_optional_bool(
+  path :: Str,
+  opt :: Option[Bool]
+) -> Result[Option[Bool], List[e.Error]] {
+  let _ := path
+  Ok(opt)
+}
+
+# ---- Defaults ----------------------------------------------------
+# `with_default` lifts an `Option[T]` to a `T` by filling in the
+# default on `None`. Compose with `check_xxx` for the
+# pydantic-style "field has a default" pattern:
+#
+#   f.check_str("nickname",
+#     f.with_default(raw.nickname, "anonymous"),
+#     [StrMaxLen(20)])
+
+fn with_default[T](opt :: Option[T], default :: T) -> T {
+  match opt {
+    Some(v) => v,
+    None    => default,
+  }
+}
+
+# Same idea but the default is computed lazily — useful when the
+# default itself is expensive or carries effects. The effect row
+# stays open so an effectful thunk propagates correctly.
+fn with_default_lazy[T](opt :: Option[T], thunk :: () -> T) -> T {
+  match opt {
+    Some(v) => v,
+    None    => thunk(),
+  }
+}
+
 # Shape-only check on a list. Element-wise validation goes through
 # `check_list_of` below.
 fn check_list_shape[T](

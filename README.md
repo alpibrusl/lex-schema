@@ -79,11 +79,13 @@ runs end-to-end. CHANGELOG carries the exact `lex --version` used.
 
 | Module | Purpose | LoC |
 |---|---|---|
-| `src/error.lex`       | `Error` / `Errors` types + path helpers + formatting | ~120 |
+| `src/error.lex`       | `Error` type + path helpers + formatting | ~120 |
 | `src/constraints.lex` | `StrCheck`/`IntCheck`/`FloatCheck`/`ListCheck` ADTs + evaluators | ~220 |
-| `src/field.lex`       | `check_str` / `check_int` / `check_float` / `check_list_of` | ~180 |
+| `src/field.lex`       | `check_str`/`check_int`/...; optional variants + `with_default` | ~250 |
 | `src/combine.lex`     | `combine2..combine6`, `and_then`, `or_else`, `traverse`, `with_path` | ~180 |
 | `src/parse.lex`       | `from_json` / `from_toml` / `from_yaml` | ~50 |
+| `src/coerce.lex`      | `str → int / float / bool` coercion + Map-based `require_*` / `optional_*` | ~190 |
+| `src/json_value.lex`  | Safe-mode `Json` ADT + parser + path-aware extractors | ~430 |
 
 ## Install
 
@@ -164,7 +166,72 @@ f.check_bool(path, value)
 f.check_list_shape(path, xs, [ListMinLen(1)])
 f.check_list_of(name, xs, [ListMaxLen(50)], element_validator)
 f.validate(path, value, code, predicate)   # escape hatch
+
+# Optional variants — None is always Ok(None).
+f.check_optional_str(path, opt, [StrMaxLen(40)])
+f.check_optional_int(path, opt, [IntPositive])
+f.check_optional_float(path, opt, [FloatFinite])
+f.check_optional_bool(path, opt)
+
+# Defaults — lift Option[T] to T then run the regular checker.
+f.with_default(opt, "anonymous")
+f.with_default_lazy(opt, fn () -> Str { lookup_default() })
 ```
+
+### Coercion (string → typed)
+
+For query strings, form posts, env vars — every value arrives as a
+`Str` but downstream code wants typed fields with the regular
+constraint catalog.
+
+```lex
+coerce.coerce_str_to_int(path, "42")          -> Result[Int, Errors]
+coerce.coerce_str_to_float(path, "3.14")      -> Result[Float, Errors]
+coerce.coerce_str_to_bool(path, "yes")        -> Result[Bool, Errors]
+
+# Coerce + validate in one step.
+coerce.check_str_as_int(path, s, [IntPositive])
+coerce.check_str_as_float(path, s, [FloatNonNegative])
+
+# Pull a value out of a Map[Str, Str] (query strings, form bodies)
+# with presence + type + constraint check in one call.
+coerce.require_int_from_map(qs, "page", [IntPositive])
+coerce.require_bool_from_map(qs, "debug")
+coerce.optional_str_from_map(qs, "query", [StrMaxLen(120)])
+```
+
+Truthy bool words: `true`, `1`, `yes`, `on`, `y`, `t`. Falsy:
+`false`, `0`, `no`, `off`, `n`, `f`. Case-insensitive,
+whitespace-trimmed.
+
+### Safe-mode JSON (`json_value`)
+
+For untrusted inputs where the JSON↔Lex type guarantees of the
+polymorphic `from_json` path aren't acceptable. The library parses
+into a `Json` ADT (`JNull | JBool(Bool) | JInt(Int) | JFloat(Float)
+| JStr(Str) | JList(...) | JObj(...)`) and every extractor is total:
+a JSON `"thirty"` against an expected `Int` field is a `type` error,
+not a VM crash.
+
+```lex
+import "../src/json_value" as jv
+
+# Parse: O(n^2) slice-based recursive descent, returns Json.
+jv.parse(body) -> Result[Json, ParseErr]
+jv.parse_into_errors(body) -> Result[Json, Errors]   # outer-shell
+
+# Field extractors — same constraint catalog, total over input.
+jv.j_str(prefix, json, "email", [StrEmail])
+jv.j_int(prefix, json, "age",   [IntInRange(13, 130)])
+jv.j_optional_str(prefix, json, "nickname", [StrMaxLen(40)])
+jv.j_obj(prefix, json, "address")   # nested record
+jv.j_list(prefix, json, "items")    # list of Json
+```
+
+Use safe-mode when JSON-type mismatches are part of your threat
+model. Use the regular `from_json` + `check_*` path when the
+producer is trusted and you want the lighter weight. Both produce
+the same `Errors` shape so callers can swap freely.
 
 ### Combinators
 
@@ -209,10 +276,13 @@ All examples in `examples/` are runnable end-to-end via
 
 | File | Demonstrates |
 |---|---|
-| `01_user_signup.lex`  | One-shot signup form validation, error accumulation |
-| `02_nested.lex`       | Nested record (User → Address) with `with_path` |
-| `03_list_of_items.lex` | Indexed list-of-records validation (`items[3].sku`) |
-| `04_api_request.lex`  | HTTP endpoint pipeline: parse → validate → 200/400 |
+| `01_user_signup.lex`         | One-shot signup form validation, error accumulation |
+| `02_nested.lex`              | Nested record (User → Address) with `with_path` |
+| `03_list_of_items.lex`       | Indexed list-of-records validation (`items[3].sku`) |
+| `04_api_request.lex`         | HTTP endpoint pipeline: parse → validate → 200/400 |
+| `05_optional_and_defaults.lex` | `Option[T]` fields + `with_default` over a `Map[Str, Str]` source |
+| `06_coerce_query_string.lex` | Query-string parsing with coercion + constraints |
+| `07_safe_mode_json.lex`      | Safe-mode validation via the `Json` ADT — total over malformed input |
 
 Run the bad-input demos to see the full error trail:
 
@@ -225,15 +295,19 @@ $ lex run examples/03_list_of_items.lex format_demo
 ## Tests
 
 ```bash
-lex run tests/test_constraints.lex run_all   # 0 ⇒ all pass
+lex run tests/test_error.lex       run_all   # 0 ⇒ all pass
+lex run tests/test_constraints.lex run_all
 lex run tests/test_field.lex       run_all
 lex run tests/test_combine.lex     run_all
-lex run tests/test_error.lex       run_all
+lex run tests/test_coerce.lex      run_all
+lex run tests/test_json_value.lex  run_all
 ```
 
-The suite covers ~50 cases across the four modules — each
-constraint's pass and fail branches, error accumulation in
-`combineN`, path manipulation, and the recovery combinators.
+The suite covers ~80 cases across the six modules — every
+constraint's pass/fail branches, error accumulation in `combineN`,
+path manipulation, coercion (both standalone and combined with
+constraints), and the Json ADT parser + extractors (primitives,
+containers, escapes, whitespace, malformed inputs).
 
 ## Design notes
 
@@ -318,6 +392,11 @@ All are filed under the `lex-pydantic` label on
   scientific-notation float literals (`1.79e308`)
 - [#326](https://github.com/alpibrusl/lex-lang/issues/326) —
   `regex.is_match_str` to skip the compile round-trip
+- [#328](https://github.com/alpibrusl/lex-lang/issues/328) —
+  record-alias coercion stops working under nested constructors
+  (`Result[T, MyErrAlias]`)
+- [#329](https://github.com/alpibrusl/lex-lang/issues/329) —
+  negative integer literals in match patterns (`Ok(-1)`)
 
 ## License
 
