@@ -85,9 +85,11 @@ runs end-to-end. CHANGELOG carries the exact `lex --version` used.
 | `src/combine.lex`     | `combine2..combine6`, `and_then`, `or_else`, `traverse`, `with_path` | ~180 |
 | `src/parse.lex`       | `from_json` / `from_toml` / `from_yaml` | ~50 |
 | `src/coerce.lex`      | `str → int / float / bool` coercion + Map-based `require_*` / `optional_*` | ~190 |
-| `src/json_value.lex`  | Safe-mode `Json` ADT + parser + path-aware extractors + stringify | ~620 |
+| `src/json_value.lex`  | Safe-mode `Json` ADT + parser + path-aware extractors + stringify | ~640 |
 | `src/datetime.lex`    | ISO 8601 datetime + ordered `DateCheck` bounds | ~170 |
 | `src/union.lex`       | Discriminated-union (tagged-union) dispatch | ~80 |
+| `src/schema.lex`      | `ModelSchema` value + schema-driven `validate` + JSON Schema / OpenAPI export | ~310 |
+| `src/cli.lex`         | `std.cli` ↔ `ModelSchema` bridge (`parse_and_validate_argv`) | ~80 |
 
 ## Install
 
@@ -287,6 +289,8 @@ All examples in `examples/` are runnable end-to-end via
 | `07_safe_mode_json.lex`        | Safe-mode validation via the `Json` ADT — total over malformed input |
 | `08_discriminated_union.lex`   | Webhook payload routing into a Lex ADT via `u.discriminate` |
 | `09_datetime_and_paths.lex`    | ISO 8601 bounds + dotted-path extraction (`organizer.email`) |
+| `10_schema_introspection.lex`  | `ModelSchema` value + run-time validation + JSON Schema / OpenAPI export |
+| `11_cli_args.lex`              | `std.cli` argv → ModelSchema validation in one call |
 
 Run the bad-input demos to see the full error trail:
 
@@ -308,9 +312,11 @@ lex run tests/test_json_value.lex  run_all
 lex run tests/test_json_extra.lex  run_all   # path + stringify
 lex run tests/test_union.lex       run_all
 lex run tests/test_datetime.lex    run_all
+lex run tests/test_schema.lex      run_all
+lex run tests/test_cli.lex         run_all
 ```
 
-The suite covers ~110 cases across the nine modules — every
+The suite covers ~130 cases across the eleven modules — every
 constraint's pass/fail branches, error accumulation in `combineN`,
 path manipulation, coercion, the Json ADT parser + extractors +
 round-trip, discriminated-union dispatch, and ISO 8601 bounds.
@@ -409,6 +415,9 @@ All are filed under the `lex-pydantic` label on
 - [#332](https://github.com/alpibrusl/lex-lang/issues/332) —
   `Str < Str` type-checks but errors at runtime (NumLt is
   Int/Float-only)
+- [#334](https://github.com/alpibrusl/lex-lang/issues/334) —
+  `list.cons` / `list.reverse` for O(n) builder loops (the
+  reason `json_value.lex`'s parser is O(n²) in the worst case)
 
 ## License
 

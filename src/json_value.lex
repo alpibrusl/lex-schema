@@ -246,12 +246,19 @@ fn parse_string_raw(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
   if char_at(src, p) != "\"" {
     Err(mk_err(p, "expected `\"`"))
   } else {
-    str_loop(src, p + 1, "")
+    # Two-cursor scan: `chunk_start` marks the start of the current
+    # escape-free run, `p` is the read head. We only `str.concat`
+    # when we hit an escape — for the common case (no escapes) the
+    # whole string is extracted with a single O(n) `str.slice`,
+    # avoiding the O(n²) char-by-char accumulator the original
+    # implementation paid for every input.
+    str_loop(src, p + 1, p + 1, "")
   }
 }
 
 fn str_loop(
   src :: Str,
+  chunk_start :: Int,
   p :: Int,
   acc :: Str
 ) -> Result[StringStep, ParseErr] {
@@ -260,15 +267,21 @@ fn str_loop(
   } else {
     let c := char_at(src, p)
     if c == "\"" {
-      Ok(mk_string_step(p + 1, acc))
+      let chunk := str.slice(src, chunk_start, p)
+      let out := if str.is_empty(acc) { chunk } else { str.concat(acc, chunk) }
+      Ok(mk_string_step(p + 1, out))
     } else {
       if c == "\\" {
+        let chunk := str.slice(src, chunk_start, p)
+        let acc2 := if str.is_empty(acc) { chunk } else { str.concat(acc, chunk) }
         match parse_escape(src, p + 1) {
           Err(e1) => Err(e1),
-          Ok(s)   => str_loop(src, s.pos, str.concat(acc, s.text)),
+          Ok(s)   => str_loop(src, s.pos, s.pos, str.concat(acc2, s.text)),
         }
       } else {
-        str_loop(src, p + 1, str.concat(acc, c))
+        # No escape — stay inside the current chunk; advance the
+        # read head without copying.
+        str_loop(src, chunk_start, p + 1, acc)
       }
     }
   }

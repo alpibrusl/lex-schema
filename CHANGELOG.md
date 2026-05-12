@@ -2,6 +2,62 @@
 
 All notable changes to lex-pydantic are tracked here.
 
+## [Unreleased] — 0.4.0
+
+### Added
+
+- `src/schema.lex` — schemas as values. `ModelSchema` carries a
+  `List[Field]`, each `Field` has a `FieldKind` (`KStr` / `KInt` /
+  `KFloat` / `KBool` / `KArray` / `KObject`) plus required-flag
+  and description. Three operations off one schema:
+  - `validate(schema, json)` runs the constraint catalog against
+    a `Json` value, returning a normalized `Json` (a `JObj` of
+    validated fields).
+  - `to_json_schema(schema)` emits JSON Schema 2020-12 (with
+    `$schema`, `properties`, `required`, formats like `email`/`uri`).
+  - `to_openapi_schema(schema)` emits the same body sans `$schema`,
+    ready to drop into an OpenAPI 3.1 `components/schemas` entry.
+- `src/cli.lex` — `std.cli` ↔ `ModelSchema` bridge.
+  `parse_and_validate_argv(spec, argv, schema)` parses CLI args,
+  flattens the `cli.parse` result (`positionals` + `flags` +
+  `options` merged), and runs the schema. CLI parse errors carry
+  `code = "parse"`; constraint failures keep their per-rule codes.
+- `examples/10_schema_introspection.lex` — User+Address with
+  arrays + nested record; one schema drives validation and emits
+  formatted JSON Schema.
+- `examples/11_cli_args.lex` — `genctl` CLI with a positional,
+  option, and flag, validated through a `ModelSchema`.
+- `tests/test_schema.lex` — 13 cases covering happy/sad paths,
+  nested-path errors, indexed-array errors, JSON Schema field
+  emission, and OpenAPI variant.
+- `tests/test_cli.lex` — 6 cases covering happy path, default
+  flowthrough, parse failure, schema failure, bucket flattening,
+  and help passthrough.
+
+### Optimized
+
+- `json_value.lex` — `parse_string_raw` now uses a two-cursor
+  scan that flushes escape-free runs via a single `str.slice`.
+  Strings with no escapes (the common case) parse in O(n) bytes
+  copied instead of O(n²). Strings with escapes still pay the
+  per-segment concat — bounded by the number of escapes, not
+  the total length.
+
+### Issues filed
+
+- [`#334`](https://github.com/alpibrusl/lex-lang/issues/334)
+  `list.cons` / `list.reverse` for O(n) builder loops — what
+  blocks the remaining O(n²) in the parser's array/object
+  loops. The string fast path closes the inner hotspot;
+  outer loops await this primitive.
+
+### Verified against
+
+- `lex 0.7.1` (HEAD of `main`).
+- 11 of 11 test suites: 0 failures.
+- 11 of 11 examples run end-to-end.
+- Every `src/*.lex` module `lex check`s cleanly.
+
 ## [Unreleased] — 0.3.0
 
 ### Added
