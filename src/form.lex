@@ -17,6 +17,7 @@
 # Effects: none.
 
 import "std.str"  as str
+import "std.int"  as int
 import "std.list" as list
 import "std.map"  as map
 
@@ -167,14 +168,25 @@ fn hex_char(n :: Int) -> Str {
   }
 }
 
-# ---- multipart/form-data (v1 stub) -------------------------------
+# ---- multipart/form-data -----------------------------------------
 #
-# Multipart parsing means tracking a CRLF-delimited boundary,
-# walking N parts each with `Content-Disposition` headers + an
-# optional `Content-Type` + a body that may be binary. The full
-# implementation is ~300-500 LoC — out of scope for this slice.
-# The stub here exists so callers wire the same shape into their
-# handler today and switch over when multipart lands.
+# RFC 7578 (RFC 2046) multipart body shape:
+#
+#   --BOUNDARY\r\n
+#   Content-Disposition: form-data; name="field"\r\n
+#   \r\n
+#   value\r\n
+#   --BOUNDARY\r\n
+#   Content-Disposition: form-data; name="upload"; filename="x.txt"\r\n
+#   Content-Type: text/plain\r\n
+#   \r\n
+#   <part body>\r\n
+#   --BOUNDARY--\r\n
+#
+# We split the body on `--BOUNDARY`, which gives:
+#   [preamble, part_1, part_2, ..., part_N, closing_trailer]
+# Each `part_k` reads `\r\n<headers>\r\n\r\n<body>\r\n`. The
+# trailer starts with `--` followed by optional CRLF + epilogue.
 
 type MultipartPart = {
   name :: Str,
@@ -183,23 +195,209 @@ type MultipartPart = {
   body :: Str,
 }
 
+# Accumulator while folding header lines.
+type PartHeaders = {
+  name :: Option[Str],
+  filename :: Option[Str],
+  content_type :: Option[Str],
+}
+
+fn mk_hdrs() -> PartHeaders {
+  { name: None, filename: None, content_type: None }
+}
+
 fn decode_multipart(
   body :: Str,
   boundary :: Str
 ) -> Result[List[MultipartPart], e.Errors] {
-  let _ := body
-  let _ := boundary
-  Err(e.single("", "unimplemented",
-    "multipart/form-data parsing is not yet supported; see lex-schema CHANGELOG"))
+  if str.is_empty(boundary) {
+    Err(e.single("", "format", "empty multipart boundary"))
+  } else {
+    let delim := str.concat("--", boundary)
+    let pieces := str.split(body, delim)
+    if list.len(pieces) < 2 {
+      Err(e.single("", "format",
+        str.concat("no multipart boundary found: ", boundary)))
+    } else {
+      let trailer := last_piece(pieces)
+      if str.starts_with(trailer, "--") {
+        walk_middle(middle_pieces(pieces), 0, [])
+      } else {
+        Err(e.single("", "format",
+          "multipart missing closing boundary (--BOUNDARY--)"))
+      }
+    }
+  }
+}
+
+fn last_piece(xs :: List[Str]) -> Str {
+  match list.head(list.reverse(xs)) {
+    Some(s) => s,
+    None    => "",
+  }
+}
+
+# pieces[1 .. n-1) — drop preamble and closing trailer.
+fn middle_pieces(xs :: List[Str]) -> List[Str] {
+  list.reverse(list.tail(list.reverse(list.tail(xs))))
+}
+
+fn walk_middle(
+  ps :: List[Str],
+  idx :: Int,
+  acc :: List[MultipartPart]
+) -> Result[List[MultipartPart], e.Errors] {
+  match list.head(ps) {
+    None        => Ok(list.reverse(acc)),
+    Some(piece) => match parse_one_part(piece, idx) {
+      Err(es) => Err(es),
+      Ok(p)   => walk_middle(list.tail(ps), idx + 1, list.cons(p, acc)),
+    },
+  }
+}
+
+fn parse_one_part(
+  piece :: Str,
+  idx :: Int
+) -> Result[MultipartPart, e.Errors] {
+  let p1 := strip_leading_crlf(piece)
+  let chunks := str.split(p1, "\r\n\r\n")
+  if list.len(chunks) < 2 {
+    Err(e.single(part_path(idx), "format",
+      "missing CRLFCRLF header/body separator"))
+  } else {
+    match list.head(chunks) {
+      None              => Err(e.single(part_path(idx), "format", "empty part")),
+      Some(headers_str) => {
+        let body_raw   := str.join(list.tail(chunks), "\r\n\r\n")
+        let body_clean := strip_trailing_crlf(body_raw)
+        parse_part_headers(headers_str, body_clean, idx)
+      },
+    }
+  }
+}
+
+fn strip_leading_crlf(s :: Str) -> Str {
+  match str.strip_prefix(s, "\r\n") {
+    Some(t) => t,
+    None    => s,
+  }
+}
+
+fn strip_trailing_crlf(s :: Str) -> Str {
+  match str.strip_suffix(s, "\r\n") {
+    Some(t) => t,
+    None    => s,
+  }
+}
+
+fn part_path(idx :: Int) -> Str {
+  str.concat("parts[", str.concat(int.to_str(idx), "]"))
+}
+
+fn parse_part_headers(
+  headers_str :: Str,
+  body :: Str,
+  idx :: Int
+) -> Result[MultipartPart, e.Errors] {
+  let lines := str.split(headers_str, "\r\n")
+  let h := list.fold(lines, mk_hdrs(),
+    fn (acc :: PartHeaders, line :: Str) -> PartHeaders {
+      parse_header_line(acc, line)
+    })
+  match h.name {
+    None    => Err(e.single(part_path(idx), "format",
+      "Content-Disposition name missing")),
+    Some(n) => Ok({
+      name: n,
+      filename: h.filename,
+      content_type: match h.content_type {
+        Some(ct) => ct,
+        None     => default_part_ct(h.filename),
+      },
+      body: body,
+    }),
+  }
+}
+
+# Default per RFC 7578 §4.4: file fields default to
+# application/octet-stream; text fields default to text/plain.
+fn default_part_ct(filename :: Option[Str]) -> Str {
+  match filename {
+    Some(_) => "application/octet-stream",
+    None    => "text/plain",
+  }
+}
+
+fn parse_header_line(h :: PartHeaders, line :: Str) -> PartHeaders {
+  if str.is_empty(str.trim(line)) { h }
+  else {
+    match find_char(line, ":") {
+      None    => h,
+      Some(i) => {
+        let key := str.to_lower(str.trim(str.slice(line, 0, i)))
+        let val := str.trim(str.slice(line, i + 1, str.len(line)))
+        if key == "content-disposition" {
+          parse_content_disposition(h, val)
+        } else {
+          if key == "content-type" {
+            { name: h.name, filename: h.filename, content_type: Some(val) }
+          } else { h }
+        }
+      },
+    }
+  }
+}
+
+fn find_char(s :: Str, c :: Str) -> Option[Int] {
+  find_char_at(s, c, 0, str.len(s))
+}
+
+fn find_char_at(s :: Str, c :: Str, i :: Int, n :: Int) -> Option[Int] {
+  if i >= n { None }
+  else {
+    if str.slice(s, i, i + 1) == c { Some(i) }
+    else { find_char_at(s, c, i + 1, n) }
+  }
+}
+
+# `form-data; name="field"; filename="x.txt"` — split on `;`,
+# trim each, peel `name=` and `filename=` prefixes, unquote.
+fn parse_content_disposition(h :: PartHeaders, val :: Str) -> PartHeaders {
+  let segs := str.split(val, ";")
+  list.fold(segs, h, fn (acc :: PartHeaders, seg :: Str) -> PartHeaders {
+    let t := str.trim(seg)
+    match str.strip_prefix(t, "name=") {
+      Some(v) => { name: Some(unquote(v)),
+                   filename: acc.filename,
+                   content_type: acc.content_type },
+      None    => match str.strip_prefix(t, "filename=") {
+        Some(v) => { name: acc.name,
+                     filename: Some(unquote(v)),
+                     content_type: acc.content_type },
+        None    => acc,
+      },
+    }
+  })
+}
+
+fn unquote(s :: Str) -> Str {
+  match str.strip_prefix(s, "\"") {
+    Some(s2) => match str.strip_suffix(s2, "\"") {
+      Some(s3) => s3,
+      None     => s2,
+    },
+    None     => s,
+  }
 }
 
 # ---- Validation wrapper ------------------------------------------
 
 # Drop-in for `coerce.require_*_from_map` callers: takes an HTTP
 # body string + Content-Type, decodes the appropriate format,
-# returns a typed `Map[Str, Str]`. Errors out on `multipart/`
-# since that's the v1 stub; callers gating on that should
-# inspect `content_type` themselves.
+# returns a typed `Map[Str, Str]`. Multipart parts are flattened
+# to `{ name -> body }`; callers that need filename + content_type
+# metadata should call `decode_multipart` directly.
 fn decode_body(
   body :: Str,
   content_type :: Str
@@ -208,11 +406,44 @@ fn decode_body(
     Ok(decode_urlencoded(body))
   } else {
     if str.starts_with(content_type, "multipart/form-data") {
-      Err(e.single("", "unimplemented",
-        "multipart/form-data decoding is not yet supported"))
+      match extract_boundary(content_type) {
+        None    => Err(e.single("", "format",
+          "multipart/form-data Content-Type missing boundary")),
+        Some(b) => match decode_multipart(body, b) {
+          Err(es)   => Err(es),
+          Ok(parts) => Ok(parts_to_map(parts)),
+        },
+      }
     } else {
       Err(e.single("", e.code_type(),
         str.concat("unsupported content-type: ", content_type)))
     }
   }
+}
+
+# Pull `boundary=VALUE` out of a Content-Type header. Accepts
+# optional quoting around the value and tolerates leading
+# whitespace per RFC 2045.
+fn extract_boundary(content_type :: Str) -> Option[Str] {
+  let segs := str.split(content_type, ";")
+  list.fold(segs, None,
+    fn (acc :: Option[Str], seg :: Str) -> Option[Str] {
+      match acc {
+        Some(b) => Some(b),
+        None    => {
+          let t := str.trim(seg)
+          match str.strip_prefix(t, "boundary=") {
+            Some(v) => Some(unquote(v)),
+            None    => None,
+          }
+        },
+      }
+    })
+}
+
+fn parts_to_map(parts :: List[MultipartPart]) -> Map[Str, Str] {
+  let pairs := list.map(parts, fn (p :: MultipartPart) -> (Str, Str) {
+    (p.name, p.body)
+  })
+  map.from_list(pairs)
 }

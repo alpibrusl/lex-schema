@@ -80,12 +80,17 @@ fn dispatch_with_charset_suffix() -> Result[Unit, Str] {
   }
 }
 
-fn dispatch_multipart_unsupported() -> Result[Unit, Str] {
+fn dispatch_multipart_well_formed() -> Result[Unit, Str] {
+  # As of v0.8.2 multipart is fully wired through `decode_body`;
+  # see tests/test_multipart.lex for the full surface. This case
+  # asserts the dispatcher routes to `decode_multipart` (which then
+  # rejects this malformed body) rather than 404'ing with
+  # "unimplemented" the way it did in v0.8.1.
   match form.decode_body("...", "multipart/form-data; boundary=X") {
-    Ok(_)   => Err("should not be implemented"),
+    Ok(_)   => Err("malformed body should not parse"),
     Err(es) => match list.head(es) {
       None     => Err("empty"),
-      Some(er) => if er.code == "unimplemented" { Ok(()) } else {
+      Some(er) => if er.code == "format" { Ok(()) } else {
         Err(str.concat("wrong code: ", er.code))
       },
     },
@@ -116,7 +121,7 @@ fn suite() -> List[Result[Unit, Str]] {
     equals_in_value(),
     dispatch_urlencoded_ok(),
     dispatch_with_charset_suffix(),
-    dispatch_multipart_unsupported(),
+    dispatch_multipart_well_formed(),
     dispatch_unsupported_ct(),
   ]
 }

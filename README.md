@@ -171,13 +171,14 @@ doesn't model. lex-schema covers the gap with:
 
 ## Status
 
-Pre-1.0. The surface is small (16 modules, ~3000 lines of pure Lex),
+Pre-1.0. The surface is small (19 modules, ~3300 lines of pure Lex),
 and stable in the sense that no breaking changes are planned for the
 listed API. Verified against lex-lang `v0.8.2`:
 
 - Every `src/` module type-checks (`lex check`).
-- Every test suite returns `run_all = 0` (~185 cases).
-- Every `examples/` demo runs end-to-end.
+- Every test suite returns `run_all = 0` (~285 cases across 24 suites).
+- Every `examples/` demo runs end-to-end (22 examples).
+- `multipart/form-data` is now first-class — no remaining v1 stubs.
 
 CHANGELOG carries the exact `lex --version` used. **All seventeen
 ergonomic / correctness issues this library filed against lex-lang
@@ -207,7 +208,7 @@ zero workarounds in source.
 | `src/fuzz.lex`          | Malformed-input fuzz driver — every category surfaces as `Err` | ~140 |
 | `src/problem.lex`       | RFC 7807 `problem+json` renderer (presets + serialization) | ~120 |
 | `src/migrate.lex`       | Schema migrations (`Transform` ADT) + backward-compat check | ~320 |
-| `src/form.lex`          | `x-www-form-urlencoded` decoder + dispatch by Content-Type | ~200 |
+| `src/form.lex`          | `x-www-form-urlencoded` + `multipart/form-data` decoder + dispatch by Content-Type | ~400 |
 
 ## Install
 
@@ -538,6 +539,36 @@ missing required, constraint failures, deep nesting) run against
 the schema. The pass condition is `count_escapes == 0` *and* no VM
 panic — the latter enforced by the run completing.
 
+### HTTP form bodies (`form`)
+
+```lex
+form.decode_urlencoded(body)            -> Map[Str, Str]
+form.decode_multipart(body, boundary)   -> Result[List[MultipartPart], Errors]
+form.decode_body(body, content_type)    -> Result[Map[Str, Str], Errors]
+form.extract_boundary(content_type)     -> Option[Str]
+form.parts_to_map(parts)                -> Map[Str, Str]
+
+type MultipartPart = {
+  name :: Str,
+  filename :: Option[Str],
+  content_type :: Str,
+  body :: Str,
+}
+```
+
+`decode_urlencoded` handles `+`-as-space, `%XX` byte escapes, bare
+keys, multi-`=`-in-value (matches `URLSearchParams` /
+`urllib.parse_qs`). `decode_multipart` parses RFC 7578 multipart
+bodies — walks `--BOUNDARY` segments, parses each part's
+`Content-Disposition` for `name` + optional `filename`, respects
+`Content-Type` per part, tolerates embedded `\r\n\r\n` in bodies,
+validates the closing `--BOUNDARY--` trailer. `decode_body`
+dispatches on Content-Type (accepts the `; charset=UTF-8` suffix
+and quoted boundaries) and flattens both formats to a uniform
+`Map[Str, Str]`, so the same `coerce.require_*_from_map` pipeline
+serves urlencoded and multipart callers. Callers that need file
+metadata go through `decode_multipart` directly.
+
 ## Examples
 
 All examples in `examples/` are runnable end-to-end via
@@ -566,6 +597,9 @@ exact invocation.
 | `17_webhook_dedup.lex`         | SHA-256 idempotency keying on top of the discriminator pattern |
 | `18_cli_codegen.lex`           | Load a JSON Schema file from disk, emit TS / Python / JSON-Schema text |
 | `19_fuzz_driver.lex`           | Run 30+ malformed inputs through a schema; assert every one surfaces as `Err` |
+| `20_payments_api.lex`          | Combined tour: format validators (IPv4, Luhn, phone E.164) + RFC 7807 + 4-target codegen + v1→v2 migration |
+| `21_form_and_diagram.lex`      | URL-encoded login → `cm.combine3` → typed `LoginFields`; same schema → Mermaid ER + Go struct |
+| `22_multipart_upload.lex`      | Avatar upload: `multipart/form-data` → `decode_multipart` → text fields validated + file metadata extracted |
 
 Run the bad-input demos to see the full error trail:
 

@@ -2,7 +2,46 @@
 
 All notable changes to lex-schema are tracked here.
 
-## [Unreleased] — 0.8.1
+## [Unreleased] — 0.8.2
+
+### Added
+
+- `src/form.lex` — `decode_multipart(body, boundary)` is now a
+  real parser, no longer a stub. Closes the one remaining
+  functional gap from v0.8.1. Implements the RFC 7578 (RFC 2046)
+  wire format: walks `--BOUNDARY` segments, parses each part's
+  `Content-Disposition` header (extracting `name` + optional
+  `filename`), respects `Content-Type` per part with sensible
+  defaults (`text/plain` for fields, `application/octet-stream`
+  for files), handles bodies containing `\r\n\r\n`, and validates
+  the closing `--BOUNDARY--` trailer.
+- `src/form.lex` — `decode_body` now dispatches multipart bodies
+  through `decode_multipart` (extracting the boundary out of the
+  Content-Type header, accepting `boundary="X"` or `boundary=X`).
+  Multipart parts flatten to `Map[Str, Str]` so the same
+  `coerce.require_*_from_map` pipeline serves urlencoded and
+  multipart callers; full part metadata (filename + content_type)
+  is available via `decode_multipart` directly.
+- `examples/22_multipart_upload.lex` — avatar-upload flow:
+  multipart body → `decode_multipart` → text fields validated
+  through `coerce.require_str_from_map`, file metadata pulled off
+  the `MultipartPart` record, composed via `cm.combine5` into a
+  typed `AvatarSubmission`.
+- `tests/test_multipart.lex` — 19 cases covering: single text
+  parts, file parts (filename + Content-Type), mixed text+file
+  parts in order, bodies with embedded `\r\n\r\n`, missing closing
+  boundary, missing Content-Disposition name, wrong boundary,
+  empty boundary, and `decode_body` dispatch including quoted
+  boundaries.
+
+### Changed
+
+- `tests/test_form.lex` — `dispatch_multipart_unsupported` ⇒
+  `dispatch_multipart_well_formed`: the dispatcher no longer
+  returns `unimplemented`; it routes to the real parser, which
+  rejects this malformed body with `code: "format"`.
+
+## [0.8.1] — 2026-05-09
 
 ### Added
 
@@ -11,8 +50,8 @@ All notable changes to lex-schema are tracked here.
   space, `%XX` byte escapes for ASCII, bare-key-as-empty-value,
   multi-`=`-in-value). `decode_body(body, content_type)`
   dispatches on Content-Type (accepts the standard
-  `; charset=UTF-8` suffix). `multipart/form-data` is stubbed —
-  v2 will land the full parser.
+  `; charset=UTF-8` suffix). `multipart/form-data` was stubbed
+  in this release — closed in 0.8.2.
 - `src/sdk.lex` — `to_go_struct(schema)` emits a Go struct per
   schema with `encoding/json` tags. PascalCases field names
   (treating `_` and `-` as word separators), wraps optional
@@ -46,11 +85,13 @@ All notable changes to lex-schema are tracked here.
 ### Verified against
 
 - `lex 0.8.2`.
-- 23 of 23 test suites: 0 failures (~265 cases).
-- 21 of 21 examples run end-to-end.
+- 24 of 24 test suites: 0 failures (~285 cases).
+- 22 of 22 examples run end-to-end.
 - Every `src/*.lex` module `lex check`s cleanly.
+- **No workarounds remain anywhere in `src/`** — the library is
+  pure 0.8.2 Lex.
 
-## [Unreleased] — 0.8.0
+## [0.8.0] — 2026-05-07
 
 ### Renamed
 
