@@ -183,3 +183,52 @@ fn with_path[T](prefix :: Str, r :: Result[T, List[e.Error]]) -> Result[T, List[
     Err(es) => Err(e.prefix_path(prefix, es)),
   }
 }
+
+# Run one or more cross-field checks against a fully-built record.
+# Each check is `(T) -> Option[List[Error]]` — `None` means pass,
+# `Some(errs)` means fail with those errors. Use `and_then` to
+# sequence after a successful `combineN`:
+#
+#   cm.and_then(combine4(..., build_user),
+#     fn (u :: User) -> Result[User, List[Error]] {
+#       cm.cross_check(u, [
+#         fn (u2 :: User) -> Option[List[Error]] {
+#           if u2.password == u2.confirm_password { None }
+#           else { Some(e.single("confirm_password", "mismatch",
+#                                "passwords must match")) }
+#         },
+#       ])
+#     })
+#
+# Errors from every check accumulate, never short-circuit. The
+# pydantic analog is `@model_validator(mode="after")`.
+fn cross_check[T](
+  value :: T,
+  checks :: List[(T) -> Option[List[e.Error]]]
+) -> Result[T, List[e.Error]] {
+  let errs := list.fold(checks, [],
+    fn (
+      acc :: List[e.Error],
+      check :: (T) -> Option[List[e.Error]]
+    ) -> List[e.Error] {
+      match check(value) {
+        None     => acc,
+        Some(es) => list.concat(acc, es),
+      }
+    })
+  if e.is_ok(errs) { Ok(value) } else { Err(errs) }
+}
+
+# Same as `cross_check` but takes a single predicate + a fixed
+# code/message pair — convenient for one-off "X and Y must agree"
+# checks where building a full `Option[Errors]` shape is overkill.
+fn require[T](
+  value :: T,
+  predicate :: (T) -> Bool,
+  path :: Str,
+  code :: Str,
+  message :: Str
+) -> Result[T, List[e.Error]] {
+  if predicate(value) { Ok(value) }
+  else { Err(e.single(path, code, message)) }
+}

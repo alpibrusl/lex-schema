@@ -2,6 +2,61 @@
 
 All notable changes to lex-pydantic are tracked here.
 
+## [Unreleased] — 0.5.0
+
+### Added
+
+- `src/combine.lex` — `cross_check[T](value, checks)` runs a list
+  of `(T) -> Option[List[Error]]` rules against an already-built
+  record. Accumulates failures across every rule; chains naturally
+  after a successful `combineN` via `cm.and_then`. The
+  `cm.require[T](value, predicate, path, code, message)` shortcut
+  covers the one-rule-plus-fixed-message case.
+- `src/property.lex` — schema-driven sample generation. `generate`
+  walks a `ModelSchema` and emits a `Json` that respects every
+  constraint (length bounds, ranges, `OneOf`, plus known-good
+  templates for `email`/`url`/`uuid`). `round_trip(schema, n,
+  seed)` runs `n` generate→validate cycles, returning `Ok(n)` on
+  a clean sweep or `Err(...)` on the first mismatch. Pure and
+  deterministic — `std.random`'s SplitMix64 means the same seed
+  yields the same sequence everywhere.
+- `src/schema_import.lex` — inverse of `to_json_schema`. Reads a
+  JSON Schema document (Draft 2020-12) and produces a `ModelSchema`.
+  Round-trip through `to_json_schema` is structurally preserving
+  for the subset the library emits.
+- `src/schema.lex` — `mk_model` / `mk_field` constructor helpers
+  whose return types pin the nominal alias; needed by
+  `schema_import` and any dynamic-schema builder because of
+  lex-lang#328.
+- `examples/12_cross_field.lex` — password+confirm match and
+  date-ordering rules wired through `cross_check`.
+- `examples/13_property_test.lex` — 200 generate→validate rounds
+  against a User schema with email/uuid/array fields.
+- `examples/14_json_schema_round_trip.lex` — emit JSON Schema,
+  parse it back, validate the same payload through both.
+- `tests/test_cross_field.lex` — 7 cases.
+- `tests/test_property.lex` — 8 cases (bounds, format templates,
+  determinism, round-trip).
+- `tests/test_schema_import.lex` — 7 cases (round-trip, direct
+  parse, format/constraint mapping, validates valid + rejects
+  invalid).
+
+### Issues filed
+
+- [`#337`](https://github.com/alpibrusl/lex-lang/issues/337)
+  constructor-pattern fail path leaks the scrutinee onto the
+  stack. Symptom: `false or match x { Variant => true, _ => false }`
+  panics at runtime when `x` is a non-matching variant. Worked
+  around by lifting the inner match into a top-level helper
+  function — its call frame contains the leaked stack value.
+
+### Verified against
+
+- `lex 0.7.1` (HEAD of `main`).
+- 14 of 14 test suites: 0 failures (~155 cases).
+- 14 of 14 examples run end-to-end.
+- Every `src/*.lex` module `lex check`s cleanly.
+
 ## [Unreleased] — 0.4.0
 
 ### Added

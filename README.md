@@ -90,6 +90,8 @@ runs end-to-end. CHANGELOG carries the exact `lex --version` used.
 | `src/union.lex`       | Discriminated-union (tagged-union) dispatch | ~80 |
 | `src/schema.lex`      | `ModelSchema` value + schema-driven `validate` + JSON Schema / OpenAPI export | ~310 |
 | `src/cli.lex`         | `std.cli` ↔ `ModelSchema` bridge (`parse_and_validate_argv`) | ~80 |
+| `src/property.lex`    | Schema-driven sample generation + round-trip property check | ~310 |
+| `src/schema_import.lex` | JSON Schema → `ModelSchema` (inverse of `to_json_schema`) | ~220 |
 
 ## Install
 
@@ -291,6 +293,9 @@ All examples in `examples/` are runnable end-to-end via
 | `09_datetime_and_paths.lex`    | ISO 8601 bounds + dotted-path extraction (`organizer.email`) |
 | `10_schema_introspection.lex`  | `ModelSchema` value + run-time validation + JSON Schema / OpenAPI export |
 | `11_cli_args.lex`              | `std.cli` argv → ModelSchema validation in one call |
+| `12_cross_field.lex`           | Cross-field rules: password match, date ordering |
+| `13_property_test.lex`         | Generate random samples from a schema, assert the round-trip property |
+| `14_json_schema_round_trip.lex` | Emit JSON Schema, parse it back, validate the same payload through both |
 
 Run the bad-input demos to see the full error trail:
 
@@ -314,9 +319,12 @@ lex run tests/test_union.lex       run_all
 lex run tests/test_datetime.lex    run_all
 lex run tests/test_schema.lex      run_all
 lex run tests/test_cli.lex         run_all
+lex run tests/test_cross_field.lex run_all
+lex run tests/test_property.lex    run_all
+lex run tests/test_schema_import.lex run_all
 ```
 
-The suite covers ~130 cases across the eleven modules — every
+The suite covers ~155 cases across the thirteen modules — every
 constraint's pass/fail branches, error accumulation in `combineN`,
 path manipulation, coercion, the Json ADT parser + extractors +
 round-trip, discriminated-union dispatch, and ISO 8601 bounds.
@@ -418,6 +426,10 @@ All are filed under the `lex-pydantic` label on
 - [#334](https://github.com/alpibrusl/lex-lang/issues/334) —
   `list.cons` / `list.reverse` for O(n) builder loops (the
   reason `json_value.lex`'s parser is O(n²) in the worst case)
+- [#337](https://github.com/alpibrusl/lex-lang/issues/337) —
+  constructor-pattern fail path leaks the scrutinee onto the
+  stack; the symptom is an "expected Bool, got Variant{...}"
+  panic far from the source when a `match` is mixed with `or`
 
 ## License
 

@@ -113,6 +113,19 @@ fn with_desc(field :: Field, desc :: Str) -> Field {
   }
 }
 
+# Constructors for callers that build the records themselves —
+# `schema_import.lex`, dynamic schema builders, etc. The return
+# type pins the nominal alias so the record-coercion gap from
+# lex-lang#328 doesn't bite when these values flow through
+# nested `Result[ModelSchema, ...]` shapes.
+fn mk_model(title :: Str, description :: Str, fields :: List[Field]) -> ModelSchema {
+  { title: title, description: description, fields: fields }
+}
+
+fn mk_field(name :: Str, required :: Bool, description :: Str, kind :: FieldKind) -> Field {
+  { name: name, required: required, description: description, kind: kind }
+}
+
 # ---- Validation ---------------------------------------------------
 
 # Run the schema against a `Json` value. The return value is a
