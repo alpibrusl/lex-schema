@@ -43,7 +43,7 @@ fn user_schema() -> s.ModelSchema {
 # Returns `Ok(count)` on a clean sweep; `Err([...])` if any
 # iteration produced a sample that failed validation.
 
-fn demo_round_trip() -> Result[Int, List[e.Error]] {
+fn demo_round_trip() -> Result[Int, e.Errors] {
   p.round_trip(user_schema(), 200, 42)
 }
 

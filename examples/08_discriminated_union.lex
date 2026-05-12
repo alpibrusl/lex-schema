@@ -35,7 +35,7 @@ type WebhookEvent =
 # error list). The signature is exactly the shape `u.discriminate`
 # expects for each branch.
 
-fn validate_signup(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
+fn validate_signup(j :: jv.Json) -> Result[WebhookEvent, e.Errors] {
   cm.combine2(
     jv.j_str("", j, "user_id", [StrPattern("^u_[a-zA-Z0-9]+$")]),
     jv.j_str("", j, "email",   [StrEmail]),
@@ -45,7 +45,7 @@ fn validate_signup(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
   )
 }
 
-fn validate_purchase(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
+fn validate_purchase(j :: jv.Json) -> Result[WebhookEvent, e.Errors] {
   cm.combine3(
     jv.j_str("", j, "user_id", [StrPattern("^u_[a-zA-Z0-9]+$")]),
     jv.j_int("", j, "cents",   [IntPositive]),
@@ -56,7 +56,7 @@ fn validate_purchase(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
   )
 }
 
-fn validate_cancel(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
+fn validate_cancel(j :: jv.Json) -> Result[WebhookEvent, e.Errors] {
   cm.combine2(
     jv.j_str("", j, "user_id", [StrPattern("^u_[a-zA-Z0-9]+$")]),
     jv.j_str("", j, "reason",  [StrMinLen(1), StrMaxLen(120)]),
@@ -68,7 +68,7 @@ fn validate_cancel(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
 
 # ---- Dispatcher ---------------------------------------------------
 
-fn validate_event(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
+fn validate_event(j :: jv.Json) -> Result[WebhookEvent, e.Errors] {
   u.discriminate("", j, "event", [
     ("signup",   validate_signup),
     ("purchase", validate_purchase),
@@ -76,30 +76,30 @@ fn validate_event(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
   ])
 }
 
-fn parse_event(body :: Str) -> Result[WebhookEvent, List[e.Error]] {
+fn parse_event(body :: Str) -> Result[WebhookEvent, e.Errors] {
   cm.and_then(jv.parse_into_errors(body),
-    fn (j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] { validate_event(j) })
+    fn (j :: jv.Json) -> Result[WebhookEvent, e.Errors] { validate_event(j) })
 }
 
 # ---- Demos --------------------------------------------------------
 
-fn demo_signup() -> Result[WebhookEvent, List[e.Error]] {
+fn demo_signup() -> Result[WebhookEvent, e.Errors] {
   parse_event(
     "{\"event\":\"signup\",\"user_id\":\"u_alice\",\"email\":\"alice@example.com\"}"
   )
 }
 
-fn demo_purchase() -> Result[WebhookEvent, List[e.Error]] {
+fn demo_purchase() -> Result[WebhookEvent, e.Errors] {
   parse_event(
     "{\"event\":\"purchase\",\"user_id\":\"u_alice\",\"cents\":2500,\"sku\":\"ABC-1234\"}"
   )
 }
 
-fn demo_unknown_tag() -> Result[WebhookEvent, List[e.Error]] {
+fn demo_unknown_tag() -> Result[WebhookEvent, e.Errors] {
   parse_event("{\"event\":\"refund\",\"user_id\":\"u_alice\"}")
 }
 
-fn demo_bad_field() -> Result[WebhookEvent, List[e.Error]] {
+fn demo_bad_field() -> Result[WebhookEvent, e.Errors] {
   # Purchase event but `cents` is negative and `sku` doesn't match.
   parse_event(
     "{\"event\":\"purchase\",\"user_id\":\"u_alice\",\"cents\":-1,\"sku\":\"nope\"}"

@@ -58,7 +58,7 @@ fn mk_order(c :: Str, items :: List[LineItem]) -> Order {
 
 fn sku_pattern() -> Str { "^[A-Z]{3}-[0-9]{4}$" }
 
-fn validate_item(path :: Str, raw :: RawItem) -> Result[LineItem, List[e.Error]] {
+fn validate_item(path :: Str, raw :: RawItem) -> Result[LineItem, e.Errors] {
   cm.with_path(path, cm.combine3(
     f.check_str("sku",         raw.sku,         [StrPattern(sku_pattern())]),
     f.check_int("quantity",    raw.quantity,    [IntPositive, IntMax(1000)]),
@@ -71,13 +71,13 @@ fn validate_item(path :: Str, raw :: RawItem) -> Result[LineItem, List[e.Error]]
 # `check_list_of` runs shape checks (length-style) then applies the
 # per-item validator with a path-aware label.
 
-fn validate_items(raws :: List[RawItem]) -> Result[List[LineItem], List[e.Error]] {
+fn validate_items(raws :: List[RawItem]) -> Result[List[LineItem], e.Errors] {
   # First check the shape of the list, then convert each row.
   # We do the conversion via `traverse` so the validated values
   # carry the correct element type (`LineItem`, not `RawItem`).
   match f.check_list_shape("items", raws, [ListNonEmpty, ListMaxLen(50)]) {
     Err(es) => Err(es),
-    Ok(_)   => cm.traverse(list.enumerate(raws), fn (p :: (Int, RawItem)) -> Result[LineItem, List[e.Error]] {
+    Ok(_)   => cm.traverse(list.enumerate(raws), fn (p :: (Int, RawItem)) -> Result[LineItem, e.Errors] {
       let i := match p { (a, _) => a }
       let v := match p { (_, b) => b }
       validate_item(item_label(i), v)
@@ -87,7 +87,7 @@ fn validate_items(raws :: List[RawItem]) -> Result[List[LineItem], List[e.Error]
 
 # ---- Outer validator ----------------------------------------------
 
-fn validate_order(raw :: RawOrder) -> Result[Order, List[e.Error]] {
+fn validate_order(raw :: RawOrder) -> Result[Order, e.Errors] {
   cm.combine2(
     f.check_str("customer", raw.customer, [StrMinLen(1), StrMaxLen(80)]),
     validate_items(raw.items),
@@ -95,10 +95,10 @@ fn validate_order(raw :: RawOrder) -> Result[Order, List[e.Error]] {
   )
 }
 
-fn parse_order(input :: Str) -> Result[Order, List[e.Error]] {
+fn parse_order(input :: Str) -> Result[Order, e.Errors] {
   cm.and_then(
     p.from_json(input, ["customer", "items"]),
-    fn (raw :: RawOrder) -> Result[Order, List[e.Error]] { validate_order(raw) }
+    fn (raw :: RawOrder) -> Result[Order, e.Errors] { validate_order(raw) }
   )
 }
 
@@ -110,13 +110,13 @@ fn item_label(i :: Int) -> Str {
 
 # ---- Demo entrypoints ---------------------------------------------
 
-fn validate_good() -> Result[Order, List[e.Error]] {
+fn validate_good() -> Result[Order, e.Errors] {
   parse_order(
     "{\"customer\":\"Acme\",\"items\":[{\"sku\":\"ABC-1234\",\"quantity\":2,\"price_cents\":2500},{\"sku\":\"XYZ-7777\",\"quantity\":1,\"price_cents\":499}]}"
   )
 }
 
-fn validate_bad() -> Result[Order, List[e.Error]] {
+fn validate_bad() -> Result[Order, e.Errors] {
   # First item has a bad sku format; second item has negative qty
   # and price; third item has a sku that's too short.
   parse_order(

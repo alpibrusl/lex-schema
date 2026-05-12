@@ -48,8 +48,8 @@ fn discriminate[T](
   path_prefix :: Str,
   j :: jv.Json,
   field :: Str,
-  branches :: List[(Str, (jv.Json) -> Result[T, List[e.Error]])]
-) -> Result[T, List[e.Error]] {
+  branches :: List[(Str, (jv.Json) -> Result[T, e.Errors])]
+) -> Result[T, e.Errors] {
   match jv.j_str(path_prefix, j, field, []) {
     Err(es) => Err(es),
     Ok(tag) => match find_branch(branches, tag) {
@@ -68,14 +68,14 @@ fn discriminate[T](
 # Lookup helpers — pure list folds.
 
 fn find_branch[T](
-  branches :: List[(Str, (jv.Json) -> Result[T, List[e.Error]])],
+  branches :: List[(Str, (jv.Json) -> Result[T, e.Errors])],
   tag :: Str
-) -> Option[(jv.Json) -> Result[T, List[e.Error]]] {
+) -> Option[(jv.Json) -> Result[T, e.Errors]] {
   list.fold(branches, find_init(),
     fn (
-      acc :: Option[(jv.Json) -> Result[T, List[e.Error]]],
-      pair :: (Str, (jv.Json) -> Result[T, List[e.Error]])
-    ) -> Option[(jv.Json) -> Result[T, List[e.Error]]] {
+      acc :: Option[(jv.Json) -> Result[T, e.Errors]],
+      pair :: (Str, (jv.Json) -> Result[T, e.Errors])
+    ) -> Option[(jv.Json) -> Result[T, e.Errors]] {
       match acc {
         Some(_) => acc,
         None    => match pair {
@@ -87,15 +87,15 @@ fn find_branch[T](
 
 # Polymorphic empty init (see lex-lang#319 for why we need the
 # helper rather than an inline `None`).
-fn find_init[T]() -> Option[(jv.Json) -> Result[T, List[e.Error]]] {
+fn find_init[T]() -> Option[(jv.Json) -> Result[T, e.Errors]] {
   None
 }
 
 fn branch_tags[T](
-  branches :: List[(Str, (jv.Json) -> Result[T, List[e.Error]])]
+  branches :: List[(Str, (jv.Json) -> Result[T, e.Errors])]
 ) -> List[Str] {
   list.map(branches, fn (
-    pair :: (Str, (jv.Json) -> Result[T, List[e.Error]])
+    pair :: (Str, (jv.Json) -> Result[T, e.Errors])
   ) -> Str {
     match pair { (k, _v) => k }
   })

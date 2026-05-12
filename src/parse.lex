@@ -26,7 +26,7 @@ import "./error" as e
 #
 # Pass `required = []` to skip the field-presence check entirely —
 # behaves like plain `json.parse`.
-fn from_json[T](source :: Str, required :: List[Str]) -> Result[T, List[e.Error]] {
+fn from_json[T](source :: Str, required :: List[Str]) -> Result[T, e.Errors] {
   match json.parse_strict(source, required) {
     Ok(v)  => Ok(v),
     Err(m) => Err(e.single("", e.code_parse(), m)),
@@ -36,7 +36,7 @@ fn from_json[T](source :: Str, required :: List[Str]) -> Result[T, List[e.Error]
 # TOML mirror. The same caveats apply: typed `T` is whatever Lex
 # infers from the call site; field-level validation belongs in
 # downstream combinators.
-fn from_toml[T](source :: Str, required :: List[Str]) -> Result[T, List[e.Error]] {
+fn from_toml[T](source :: Str, required :: List[Str]) -> Result[T, e.Errors] {
   match toml.parse_strict(source, required) {
     Ok(v)  => Ok(v),
     Err(m) => Err(e.single("", e.code_parse(), m)),
@@ -44,7 +44,7 @@ fn from_toml[T](source :: Str, required :: List[Str]) -> Result[T, List[e.Error]
 }
 
 # YAML mirror.
-fn from_yaml[T](source :: Str, required :: List[Str]) -> Result[T, List[e.Error]] {
+fn from_yaml[T](source :: Str, required :: List[Str]) -> Result[T, e.Errors] {
   match yaml.parse_strict(source, required) {
     Ok(v)  => Ok(v),
     Err(m) => Err(e.single("", e.code_parse(), m)),

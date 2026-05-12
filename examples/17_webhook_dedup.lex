@@ -51,7 +51,7 @@ type WebhookEvent =
     Charge({ id :: Str, cents :: Int })
   | Refund({ id :: Str, cents :: Int })
 
-fn validate_charge(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
+fn validate_charge(j :: jv.Json) -> Result[WebhookEvent, e.Errors] {
   cm.combine2(
     jv.j_str("", j, "id",    [StrMinLen(1)]),
     jv.j_int("", j, "cents", [IntPositive]),
@@ -59,7 +59,7 @@ fn validate_charge(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
   )
 }
 
-fn validate_refund(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
+fn validate_refund(j :: jv.Json) -> Result[WebhookEvent, e.Errors] {
   cm.combine2(
     jv.j_str("", j, "id",    [StrMinLen(1)]),
     jv.j_int("", j, "cents", [IntPositive]),
@@ -67,7 +67,7 @@ fn validate_refund(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
   )
 }
 
-fn validate_event(j :: jv.Json) -> Result[WebhookEvent, List[e.Error]] {
+fn validate_event(j :: jv.Json) -> Result[WebhookEvent, e.Errors] {
   u.discriminate("", j, "event", [
     ("charge", validate_charge),
     ("refund", validate_refund),
@@ -97,7 +97,7 @@ fn idempotency_key(j :: jv.Json) -> Str {
 type Outcome =
     Processed({ key :: Str, event :: WebhookEvent })
   | Skipped({ key :: Str })
-  | Rejected({ errors :: List[e.Error] })
+  | Rejected({ errors :: e.Errors })
 
 fn process_one(
   body :: Str,

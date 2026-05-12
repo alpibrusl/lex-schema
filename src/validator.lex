@@ -41,14 +41,14 @@ fn make(schema :: s.ModelSchema) -> Validator {
 }
 
 # Validate a `Json` payload against the bundled schema.
-fn validate(v :: Validator, payload :: jv.Json) -> Result[jv.Json, List[e.Error]] {
+fn validate(v :: Validator, payload :: jv.Json) -> Result[jv.Json, e.Errors] {
   s.validate(v.schema, payload)
 }
 
 # Validate a serialized JSON Str — parses + validates in one
 # call. Outer parse errors carry `code = "parse"`; inner ones
 # the regular per-field codes.
-fn validate_str(v :: Validator, body :: Str) -> Result[jv.Json, List[e.Error]] {
+fn validate_str(v :: Validator, body :: Str) -> Result[jv.Json, e.Errors] {
   match jv.parse_into_errors(body) {
     Err(es) => Err(es),
     Ok(j)   => validate(v, j),

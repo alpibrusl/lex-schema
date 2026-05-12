@@ -41,7 +41,7 @@ fn mk_profile(un :: Str, nick :: Option[Str], color :: Str) -> Profile {
 # class. This is the natural source shape for query strings,
 # form bodies, env vars, etc.
 
-fn validate(src :: Map[Str, Str]) -> Result[Profile, List[e.Error]] {
+fn validate(src :: Map[Str, Str]) -> Result[Profile, e.Errors] {
   cm.combine3(
     # Required.
     require_str(src, "username", [StrMinLen(3), StrMaxLen(32),
@@ -65,7 +65,7 @@ fn require_str(
   src :: Map[Str, Str],
   key :: Str,
   checks :: List[c.StrCheck]
-) -> Result[Str, List[e.Error]] {
+) -> Result[Str, e.Errors] {
   match map.get(src, key) {
     None    => Err(e.single(key, e.code_missing(), "field is required")),
     Some(s) => f.check_str(key, s, checks),
@@ -74,7 +74,7 @@ fn require_str(
 
 # ---- Demo inputs --------------------------------------------------
 
-fn demo_present() -> Result[Profile, List[e.Error]] {
+fn demo_present() -> Result[Profile, e.Errors] {
   let src := map.from_list([
     ("username", "alice_42"),
     ("nickname", "Ally"),
@@ -83,13 +83,13 @@ fn demo_present() -> Result[Profile, List[e.Error]] {
   validate(src)
 }
 
-fn demo_absent() -> Result[Profile, List[e.Error]] {
+fn demo_absent() -> Result[Profile, e.Errors] {
   # No nickname, no color: nickname stays None, color falls back to "dark".
   let src := map.from_list([("username", "bob_99")])
   validate(src)
 }
 
-fn demo_bad() -> Result[Profile, List[e.Error]] {
+fn demo_bad() -> Result[Profile, e.Errors] {
   # username too short, nickname too long, color not in the allowed set.
   let src := map.from_list([
     ("username", "x"),

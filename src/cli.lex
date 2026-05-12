@@ -35,7 +35,7 @@ import "./combine"     as cm
 # Round-trip through string form. Costs one extra serialize+parse
 # per CLI invocation — fine in a CLI startup path where the human
 # is the bottleneck.
-fn parsed_to_value(parsed :: Json) -> Result[jv.Json, List[e.Error]] {
+fn parsed_to_value(parsed :: Json) -> Result[jv.Json, e.Errors] {
   let s_form := json.stringify(parsed)
   jv.parse_into_errors(s_form)
 }
@@ -54,11 +54,11 @@ fn parse_and_validate_argv(
   spec :: Json,
   argv :: List[Str],
   schema :: s.ModelSchema
-) -> Result[jv.Json, List[e.Error]] {
+) -> Result[jv.Json, e.Errors] {
   match cli.parse(spec, argv) {
     Err(m) => Err(e.single("", e.code_parse(), m)),
     Ok(parsed) => cm.and_then(parsed_to_value(parsed),
-      fn (v :: jv.Json) -> Result[jv.Json, List[e.Error]] {
+      fn (v :: jv.Json) -> Result[jv.Json, e.Errors] {
         s.validate(schema, flatten_cli_result(v))
       }),
   }

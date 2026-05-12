@@ -26,7 +26,7 @@ import "./field"       as f
 
 # ---- str → int ----------------------------------------------------
 
-fn coerce_str_to_int(path :: Str, s :: Str) -> Result[Int, List[e.Error]] {
+fn coerce_str_to_int(path :: Str, s :: Str) -> Result[Int, e.Errors] {
   match str.to_int(str.trim(s)) {
     Some(n) => Ok(n),
     None    => Err(e.single(path, e.code_type(),
@@ -38,7 +38,7 @@ fn check_str_as_int(
   path :: Str,
   s :: Str,
   checks :: List[c.IntCheck]
-) -> Result[Int, List[e.Error]] {
+) -> Result[Int, e.Errors] {
   match coerce_str_to_int(path, s) {
     Err(es) => Err(es),
     Ok(n)   => f.check_int(path, n, checks),
@@ -47,7 +47,7 @@ fn check_str_as_int(
 
 # ---- str → float --------------------------------------------------
 
-fn coerce_str_to_float(path :: Str, s :: Str) -> Result[Float, List[e.Error]] {
+fn coerce_str_to_float(path :: Str, s :: Str) -> Result[Float, e.Errors] {
   match str.to_float(str.trim(s)) {
     Some(x) => Ok(x),
     None    => Err(e.single(path, e.code_type(),
@@ -59,7 +59,7 @@ fn check_str_as_float(
   path :: Str,
   s :: Str,
   checks :: List[c.FloatCheck]
-) -> Result[Float, List[e.Error]] {
+) -> Result[Float, e.Errors] {
   match coerce_str_to_float(path, s) {
     Err(es) => Err(es),
     Ok(x)   => f.check_float(path, x, checks),
@@ -72,7 +72,7 @@ fn check_str_as_float(
 # `false`, `1`, `0`, `yes`, `no`, `on`, `off`. Case-insensitive.
 # Anything else is a coercion failure.
 
-fn coerce_str_to_bool(path :: Str, s :: Str) -> Result[Bool, List[e.Error]] {
+fn coerce_str_to_bool(path :: Str, s :: Str) -> Result[Bool, e.Errors] {
   let normalized := str.to_lower(str.trim(s))
   if is_truthy_word(normalized) {
     Ok(true)
@@ -123,7 +123,7 @@ fn require_int_from_map(
   src :: Map[Str, Str],
   key :: Str,
   checks :: List[c.IntCheck]
-) -> Result[Int, List[e.Error]] {
+) -> Result[Int, e.Errors] {
   match map.get(src, key) {
     None    => Err(e.single(key, e.code_missing(), "field is required")),
     Some(s) => check_str_as_int(key, s, checks),
@@ -134,7 +134,7 @@ fn require_float_from_map(
   src :: Map[Str, Str],
   key :: Str,
   checks :: List[c.FloatCheck]
-) -> Result[Float, List[e.Error]] {
+) -> Result[Float, e.Errors] {
   match map.get(src, key) {
     None    => Err(e.single(key, e.code_missing(), "field is required")),
     Some(s) => check_str_as_float(key, s, checks),
@@ -144,7 +144,7 @@ fn require_float_from_map(
 fn require_bool_from_map(
   src :: Map[Str, Str],
   key :: Str
-) -> Result[Bool, List[e.Error]] {
+) -> Result[Bool, e.Errors] {
   match map.get(src, key) {
     None    => Err(e.single(key, e.code_missing(), "field is required")),
     Some(s) => coerce_str_to_bool(key, s),
@@ -155,7 +155,7 @@ fn require_str_from_map(
   src :: Map[Str, Str],
   key :: Str,
   checks :: List[c.StrCheck]
-) -> Result[Str, List[e.Error]] {
+) -> Result[Str, e.Errors] {
   match map.get(src, key) {
     None    => Err(e.single(key, e.code_missing(), "field is required")),
     Some(s) => f.check_str(key, s, checks),
@@ -168,7 +168,7 @@ fn optional_int_from_map(
   src :: Map[Str, Str],
   key :: Str,
   checks :: List[c.IntCheck]
-) -> Result[Option[Int], List[e.Error]] {
+) -> Result[Option[Int], e.Errors] {
   match map.get(src, key) {
     None    => Ok(None),
     Some(s) => match check_str_as_int(key, s, checks) {
@@ -182,7 +182,7 @@ fn optional_str_from_map(
   src :: Map[Str, Str],
   key :: Str,
   checks :: List[c.StrCheck]
-) -> Result[Option[Str], List[e.Error]] {
+) -> Result[Option[Str], e.Errors] {
   match map.get(src, key) {
     None    => Ok(None),
     Some(s) => match f.check_str(key, s, checks) {

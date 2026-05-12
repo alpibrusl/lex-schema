@@ -62,7 +62,7 @@ fn country_pattern() -> Str { "^[A-Z]{2}$" }
 # swapping the constraint at the call site.
 fn zip_pattern() -> Str { "^[0-9]{5}$" }
 
-fn validate_address(raw :: RawAddress) -> Result[Address, List[e.Error]] {
+fn validate_address(raw :: RawAddress) -> Result[Address, e.Errors] {
   cm.combine4(
     f.check_str("street",  raw.street,  [StrMinLen(1), StrMaxLen(120)]),
     f.check_str("city",    raw.city,    [StrMinLen(1), StrMaxLen(80)]),
@@ -74,7 +74,7 @@ fn validate_address(raw :: RawAddress) -> Result[Address, List[e.Error]] {
 
 # ---- Outer validator ----------------------------------------------
 
-fn validate_user(raw :: RawUser) -> Result[User, List[e.Error]] {
+fn validate_user(raw :: RawUser) -> Result[User, e.Errors] {
   cm.combine3(
     f.check_str("name",  raw.name,  [StrMinLen(1), StrMaxLen(80)]),
     f.check_str("email", raw.email, [StrEmail]),
@@ -85,22 +85,22 @@ fn validate_user(raw :: RawUser) -> Result[User, List[e.Error]] {
 
 # ---- End-to-end ---------------------------------------------------
 
-fn parse_user(input :: Str) -> Result[User, List[e.Error]] {
+fn parse_user(input :: Str) -> Result[User, e.Errors] {
   cm.and_then(
     p.from_json(input, ["name", "email", "address"]),
-    fn (raw :: RawUser) -> Result[User, List[e.Error]] { validate_user(raw) }
+    fn (raw :: RawUser) -> Result[User, e.Errors] { validate_user(raw) }
   )
 }
 
 # ---- Demo entrypoints ---------------------------------------------
 
-fn validate_good() -> Result[User, List[e.Error]] {
+fn validate_good() -> Result[User, e.Errors] {
   parse_user(
     "{\"name\":\"Alice\",\"email\":\"alice@example.com\",\"address\":{\"street\":\"1 Market St\",\"city\":\"SF\",\"zip\":\"94103\",\"country\":\"US\"}}"
   )
 }
 
-fn validate_bad() -> Result[User, List[e.Error]] {
+fn validate_bad() -> Result[User, e.Errors] {
   # Bad email + bad zip + bad country code.
   parse_user(
     "{\"name\":\"Bob\",\"email\":\"nope\",\"address\":{\"street\":\"\",\"city\":\"\",\"zip\":\"abc\",\"country\":\"USA\"}}"

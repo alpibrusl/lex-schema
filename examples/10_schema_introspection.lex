@@ -61,20 +61,20 @@ fn user_schema() -> s.ModelSchema {
 
 # ---- Demos: validate ----------------------------------------------
 
-fn parse_and_validate(body :: Str) -> Result[jv.Json, List[e.Error]] {
+fn parse_and_validate(body :: Str) -> Result[jv.Json, e.Errors] {
   cm.and_then(jv.parse_into_errors(body),
-    fn (j :: jv.Json) -> Result[jv.Json, List[e.Error]] {
+    fn (j :: jv.Json) -> Result[jv.Json, e.Errors] {
       s.validate(user_schema(), j)
     })
 }
 
-fn demo_validate() -> Result[jv.Json, List[e.Error]] {
+fn demo_validate() -> Result[jv.Json, e.Errors] {
   parse_and_validate(
     "{\"name\":\"Alice\",\"email\":\"alice@example.com\",\"age\":29,\"address\":{\"street\":\"1 Market St\",\"city\":\"SF\",\"zip\":\"94103\",\"country\":\"US\"},\"tags\":[\"vip\",\"beta\"]}"
   )
 }
 
-fn demo_validate_bad() -> Result[jv.Json, List[e.Error]] {
+fn demo_validate_bad() -> Result[jv.Json, e.Errors] {
   # email bad, age 7, address.country lowercase, tags has an empty entry
   parse_and_validate(
     "{\"name\":\"Bob\",\"email\":\"nope\",\"age\":7,\"address\":{\"street\":\"x\",\"city\":\"SF\",\"zip\":\"94103\",\"country\":\"us\"},\"tags\":[\"vip\",\"\"]}"

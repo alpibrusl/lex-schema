@@ -35,7 +35,7 @@ fn mk_user(em :: Str, un :: Str, ag :: Int) -> User {
 }
 
 # Validate against the Json ADT — every step is total.
-fn validate_user(j :: jv.Json) -> Result[User, List[e.Error]] {
+fn validate_user(j :: jv.Json) -> Result[User, e.Errors] {
   cm.combine3(
     jv.j_str("", j, "email",    [StrEmail]),
     jv.j_str("", j, "username", [StrMinLen(3), StrMaxLen(32),
@@ -45,14 +45,14 @@ fn validate_user(j :: jv.Json) -> Result[User, List[e.Error]] {
   )
 }
 
-fn parse_user(body :: Str) -> Result[User, List[e.Error]] {
+fn parse_user(body :: Str) -> Result[User, e.Errors] {
   cm.and_then(jv.parse_into_errors(body),
-    fn (j :: jv.Json) -> Result[User, List[e.Error]] { validate_user(j) })
+    fn (j :: jv.Json) -> Result[User, e.Errors] { validate_user(j) })
 }
 
 # ---- Demos ---------------------------------------------------------
 
-fn validate_good() -> Result[User, List[e.Error]] {
+fn validate_good() -> Result[User, e.Errors] {
   parse_user(
     "{\"email\":\"alice@example.com\",\"username\":\"alice_42\",\"age\":29}"
   )
@@ -62,19 +62,19 @@ fn validate_good() -> Result[User, List[e.Error]] {
 # `parse_strict` path this produces a runtime crash the first time
 # downstream code does `user.age + 1`. With the Json ADT path it
 # surfaces as a precise typed error.
-fn validate_type_wrong() -> Result[User, List[e.Error]] {
+fn validate_type_wrong() -> Result[User, e.Errors] {
   parse_user(
     "{\"email\":\"alice@example.com\",\"username\":\"alice_42\",\"age\":\"thirty\"}"
   )
 }
 
-fn validate_missing() -> Result[User, List[e.Error]] {
+fn validate_missing() -> Result[User, e.Errors] {
   parse_user(
     "{\"email\":\"alice@example.com\",\"username\":\"alice_42\"}"
   )
 }
 
-fn validate_garbage() -> Result[User, List[e.Error]] {
+fn validate_garbage() -> Result[User, e.Errors] {
   parse_user("not valid json at all")
 }
 

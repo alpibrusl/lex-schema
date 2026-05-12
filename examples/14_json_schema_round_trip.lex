@@ -32,7 +32,7 @@ fn original() -> s.ModelSchema {
 # Round-trip: original → JSON Schema → text → JSON Schema (parsed) →
 # imported ModelSchema. Compare validation outcomes on the same
 # payload from each side.
-fn demo_roundtrip() -> Result[Str, List[e.Error]] {
+fn demo_roundtrip() -> Result[Str, e.Errors] {
   let s_text := jv.stringify(s.to_json_schema(original()))
   match si.from_str(s_text) {
     Err(es)       => Err(es),
@@ -51,7 +51,7 @@ fn demo_roundtrip() -> Result[Str, List[e.Error]] {
 # Take an externally-authored JSON Schema document and validate
 # data against it. Demonstrates the "use schemas you didn't write"
 # path.
-fn demo_external_schema() -> Result[Str, List[e.Error]] {
+fn demo_external_schema() -> Result[Str, e.Errors] {
   let external_schema_text := "
     {
       \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",

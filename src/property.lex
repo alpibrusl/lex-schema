@@ -381,7 +381,7 @@ fn round_trip(
   schema :: s.ModelSchema,
   iterations :: Int,
   seed :: Int
-) -> Result[Int, List[e.Error]] {
+) -> Result[Int, e.Errors] {
   round_trip_loop(schema, iterations, random.seed(seed), 0)
 }
 
@@ -390,7 +390,7 @@ fn round_trip_loop(
   remaining :: Int,
   rng :: Rng,
   passed :: Int
-) -> Result[Int, List[e.Error]] {
+) -> Result[Int, e.Errors] {
   if remaining <= 0 { Ok(passed) }
   else {
     let g := generate(schema, rng)

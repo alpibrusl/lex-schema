@@ -31,13 +31,13 @@ import "./schema"      as s
 
 # ---- Entry points -------------------------------------------------
 
-fn from_json_schema(j :: jv.Json) -> Result[s.ModelSchema, List[e.Error]] {
+fn from_json_schema(j :: jv.Json) -> Result[s.ModelSchema, e.Errors] {
   parse_model_at("", j)
 }
 
 # Convenience: take a serialized JSON document and run the pair
 # `jv.parse_into_errors` + `from_json_schema` in one call.
-fn from_str(src :: Str) -> Result[s.ModelSchema, List[e.Error]] {
+fn from_str(src :: Str) -> Result[s.ModelSchema, e.Errors] {
   match jv.parse_into_errors(src) {
     Err(es) => Err(es),
     Ok(j)   => from_json_schema(j),
@@ -49,7 +49,7 @@ fn from_str(src :: Str) -> Result[s.ModelSchema, List[e.Error]] {
 fn parse_model_at(
   path :: Str,
   j :: jv.Json
-) -> Result[s.ModelSchema, List[e.Error]] {
+) -> Result[s.ModelSchema, e.Errors] {
   let title       := str_field_or(j, "title", "")
   let description := str_field_or(j, "description", "")
   let required_set := required_names(j)
@@ -62,9 +62,9 @@ fn parse_model_at(
       Some(entries) => {
         let walked := list.fold(entries, walk_init(),
           fn (
-            acc :: (List[s.Field], List[e.Error]),
+            acc :: (List[s.Field], e.Errors),
             pair :: (Str, jv.Json)
-          ) -> (List[s.Field], List[e.Error]) {
+          ) -> (List[s.Field], e.Errors) {
             let fields := match acc { (f, _) => f }
             let errs   := match acc { (_, e) => e }
             let name := match pair { (n, _) => n }
@@ -85,14 +85,14 @@ fn parse_model_at(
   }
 }
 
-fn walk_init() -> (List[s.Field], List[e.Error]) { ([], []) }
+fn walk_init() -> (List[s.Field], e.Errors) { ([], []) }
 
 fn parse_field(
   path :: Str,
   name :: Str,
   j :: jv.Json,
   required :: Bool
-) -> Result[s.Field, List[e.Error]] {
+) -> Result[s.Field, e.Errors] {
   let desc := str_field_or(j, "description", "")
   match parse_kind(path, j) {
     Err(es)   => Err(es),
@@ -102,7 +102,7 @@ fn parse_field(
   }
 }
 
-fn parse_kind(path :: Str, j :: jv.Json) -> Result[s.FieldKind, List[e.Error]] {
+fn parse_kind(path :: Str, j :: jv.Json) -> Result[s.FieldKind, e.Errors] {
   match jv.get_field(j, "type") {
     None    => Ok(KStr([])),     # permissive fallback for $ref / oneOf etc.
     Some(t) => match jv.as_str(t) {
@@ -130,7 +130,7 @@ fn parse_kind(path :: Str, j :: jv.Json) -> Result[s.FieldKind, List[e.Error]] {
 fn parse_array_kind(
   path :: Str,
   j :: jv.Json
-) -> Result[s.FieldKind, List[e.Error]] {
+) -> Result[s.FieldKind, e.Errors] {
   let shape := parse_list_checks(j)
   match jv.get_field(j, "items") {
     None        => Ok(KArray(KStr([]), shape)),

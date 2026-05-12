@@ -58,7 +58,7 @@ fn mk_signup(em :: Str, un :: Str, ag :: Int) -> Signup {
 
 # ---- Validator ----------------------------------------------------
 
-fn validate_signup(raw :: RawSignup) -> Result[Signup, List[e.Error]] {
+fn validate_signup(raw :: RawSignup) -> Result[Signup, e.Errors] {
   cm.combine3(
     f.check_str("email",    raw.email,    [StrEmail]),
     f.check_str("username", raw.username, [StrMinLen(3), StrMaxLen(32),
@@ -68,10 +68,10 @@ fn validate_signup(raw :: RawSignup) -> Result[Signup, List[e.Error]] {
   )
 }
 
-fn parse_signup(body :: Str) -> Result[Signup, List[e.Error]] {
+fn parse_signup(body :: Str) -> Result[Signup, e.Errors] {
   cm.and_then(
     p.from_json(body, ["email", "username", "age"]),
-    fn (raw :: RawSignup) -> Result[Signup, List[e.Error]] { validate_signup(raw) }
+    fn (raw :: RawSignup) -> Result[Signup, e.Errors] { validate_signup(raw) }
   )
 }
 
@@ -91,7 +91,7 @@ fn render_error(err :: e.Error) -> Str {
   str.concat("{", str.concat(mmv, "}"))
 }
 
-fn render_errors(errs :: List[e.Error]) -> Str {
+fn render_errors(errs :: e.Errors) -> Str {
   let items := list.map(errs, fn (er :: e.Error) -> Str { render_error(er) })
   let inner := str.join(items, ",")
   str.concat("{\"errors\":[", str.concat(inner, "]}"))

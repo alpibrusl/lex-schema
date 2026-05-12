@@ -15,12 +15,6 @@
 # Combinators in `combine.lex` accumulate by concatenation;
 # producers in `field.lex` always return a singleton or empty
 # list. The module has no effects.
-#
-# We use `List[Error]` directly rather than aliasing it to a name
-# like `Errors`: Lex unfolds Record aliases transparently but
-# leaves List aliases nominal, so an alias here would block the
-# obvious `[{path:..., code:..., message:...}]` literal at every
-# call site. The verbosity is worth the seamless inference.
 
 import "std.str" as str
 import "std.int" as int
@@ -31,6 +25,12 @@ type Error = {
   code :: Str,
   message :: Str,
 }
+
+# `Errors` is a transparent alias for `List[Error]`. Restored in
+# v0.8.2 once lex-lang#345 closed the polymorphic-closure-param
+# alias-unfold gap — fold reducers annotated `(Errors, Errors)
+# -> Errors` now unify with `list.fold`'s expected signature.
+type Errors = List[Error]
 
 # A handful of canonical codes the library emits. Application code is
 # free to add its own; these are documented so dispatchers know what
@@ -55,23 +55,23 @@ fn error(path :: Str, code :: Str, message :: Str) -> Error {
 }
 
 # Singleton error list.
-fn single(path :: Str, code :: Str, message :: Str) -> List[Error] {
+fn single(path :: Str, code :: Str, message :: Str) -> Errors {
   [{ path: path, code: code, message: message }]
 }
 
 # Empty list of errors — used by combinators as the "success" carrier.
-fn none() -> List[Error] { [] }
+fn none() -> Errors { [] }
 
 # Are we error-free?
-fn is_ok(errs :: List[Error]) -> Bool { list.is_empty(errs) }
+fn is_ok(errs :: Errors) -> Bool { list.is_empty(errs) }
 
 # Concatenate two error lists. Useful when applicative combinators
 # want to merge sibling-field failures without losing any of them.
-fn concat(a :: List[Error], b :: List[Error]) -> List[Error] { list.concat(a, b) }
+fn concat(a :: Errors, b :: Errors) -> Errors { list.concat(a, b) }
 
 # Concatenate a list of error lists into one.
-fn flatten(parts :: List[List[Error]]) -> List[Error] {
-  list.fold(parts, [], fn (acc :: List[Error], e :: List[Error]) -> List[Error] {
+fn flatten(parts :: List[Errors]) -> Errors {
+  list.fold(parts, [], fn (acc :: Errors, e :: Errors) -> Errors {
     list.concat(acc, e)
   })
 }
@@ -82,7 +82,7 @@ fn flatten(parts :: List[List[Error]]) -> List[Error] {
 #
 # An empty prefix is the identity (so leaf validators can return
 # `prefix=""` paths and parents add structure as they ascend).
-fn prefix_path(prefix :: Str, errs :: List[Error]) -> List[Error] {
+fn prefix_path(prefix :: Str, errs :: Errors) -> Errors {
   if str.is_empty(prefix) {
     errs
   } else {
@@ -98,7 +98,7 @@ fn prefix_path(prefix :: Str, errs :: List[Error]) -> List[Error] {
 }
 
 # Same idea for list-indexed paths: `items[3]`.
-fn prefix_index(name :: Str, idx :: Int, errs :: List[Error]) -> List[Error] {
+fn prefix_index(name :: Str, idx :: Int, errs :: Errors) -> Errors {
   let head := str.concat(name, str.concat("[", str.concat(int.to_str(idx), "]")))
   list.map(errs, fn (e :: Error) -> Error {
     let joined := if str.is_empty(e.path) {
@@ -118,7 +118,7 @@ fn render_one(e :: Error) -> Str {
 }
 
 # Join all errors as "path: message [code]" lines separated by "\n".
-fn format(errs :: List[Error]) -> Str {
+fn format(errs :: Errors) -> Str {
   let lines := list.map(errs, fn (e :: Error) -> Str { render_one(e) })
   str.join(lines, "\n")
 }

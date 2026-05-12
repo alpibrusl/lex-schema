@@ -33,7 +33,7 @@ fn mk(p :: Int, pp :: Int, q :: Option[Str], ia :: Bool) -> ListParams {
   { page: p, per_page: pp, query: q, include_archived: ia }
 }
 
-fn validate(qs :: Map[Str, Str]) -> Result[ListParams, List[e.Error]] {
+fn validate(qs :: Map[Str, Str]) -> Result[ListParams, e.Errors] {
   cm.combine4(
     coerce.require_int_from_map(qs, "page",     [IntPositive]),
     coerce.require_int_from_map(qs, "per_page", [IntInRange(1, 100)]),
@@ -62,11 +62,11 @@ fn parse_query(s :: Str) -> Map[Str, Str] {
   map.from_list(pairs)
 }
 
-fn demo_good() -> Result[ListParams, List[e.Error]] {
+fn demo_good() -> Result[ListParams, e.Errors] {
   validate(parse_query("page=3&per_page=20&query=lex&include_archived=true"))
 }
 
-fn demo_bad() -> Result[ListParams, List[e.Error]] {
+fn demo_bad() -> Result[ListParams, e.Errors] {
   # `page` isn't a number, `per_page` is out of range, `include_archived`
   # uses an un-coercible string. `query` is absent — that's fine, it's
   # optional.

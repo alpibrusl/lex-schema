@@ -84,7 +84,7 @@ fn success_body(value :: jv.Json) -> Str {
   str.concat("{\"ok\":true,\"value\":", str.concat(jv.stringify(value), "}"))
 }
 
-fn error_body_many(errs :: List[e.Error]) -> Str {
+fn error_body_many(errs :: e.Errors) -> Str {
   let items := list.map(errs, fn (er :: e.Error) -> Str { error_to_json(er) })
   str.concat("{\"ok\":false,\"errors\":[",
     str.concat(str.join(items, ","), "]}"))

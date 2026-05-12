@@ -53,7 +53,7 @@ import "../src/validator"     as v
 
 # Load a Validator off a JSON Schema file path. Returns a flat
 # `Result[Validator, List[Error]]` so the caller can pipeline.
-fn load_validator(path :: Str) -> [io] Result[v.Validator, List[e.Error]] {
+fn load_validator(path :: Str) -> [io] Result[v.Validator, e.Errors] {
   match io.read(path) {
     Err(m) => Err(e.single(path, "io_read", m)),
     Ok(text) => match si.from_str(text) {

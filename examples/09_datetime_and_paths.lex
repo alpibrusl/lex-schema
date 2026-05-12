@@ -44,7 +44,7 @@ fn mk_event(
 
 fn upper_bound() -> Str { "2027-01-01T00:00:00Z" }
 
-fn validate(j :: jv.Json) -> Result[ScheduledEvent, List[e.Error]] {
+fn validate(j :: jv.Json) -> Result[ScheduledEvent, e.Errors] {
   cm.combine4(
     jv.j_str("", j, "title", [StrMinLen(1), StrMaxLen(120)]),
     dt_field(j, "scheduled_for", [DateAtOrBefore(upper_bound())]),
@@ -61,27 +61,27 @@ fn dt_field(
   j :: jv.Json,
   field :: Str,
   checks :: List[dt.DateCheck]
-) -> Result[Str, List[e.Error]] {
+) -> Result[Str, e.Errors] {
   match jv.j_str("", j, field, []) {
     Err(es) => Err(es),
     Ok(s)   => dt.check_iso_datetime(field, s, checks),
   }
 }
 
-fn parse_event(body :: Str) -> Result[ScheduledEvent, List[e.Error]] {
+fn parse_event(body :: Str) -> Result[ScheduledEvent, e.Errors] {
   cm.and_then(jv.parse_into_errors(body),
-    fn (j :: jv.Json) -> Result[ScheduledEvent, List[e.Error]] { validate(j) })
+    fn (j :: jv.Json) -> Result[ScheduledEvent, e.Errors] { validate(j) })
 }
 
 # ---- Demos --------------------------------------------------------
 
-fn demo_good() -> Result[ScheduledEvent, List[e.Error]] {
+fn demo_good() -> Result[ScheduledEvent, e.Errors] {
   parse_event(
     "{\"title\":\"Team offsite\",\"scheduled_for\":\"2026-08-12T09:30:00Z\",\"organizer\":{\"email\":\"alice@example.com\"},\"location\":{\"address\":{\"city\":\"Berlin\"}}}"
   )
 }
 
-fn demo_bad() -> Result[ScheduledEvent, List[e.Error]] {
+fn demo_bad() -> Result[ScheduledEvent, e.Errors] {
   # title empty, date in 2030 (past the upper bound),
   # organizer.email is not a string, location.address.city missing.
   parse_event(

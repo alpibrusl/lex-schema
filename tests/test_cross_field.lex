@@ -15,12 +15,12 @@ type Pair = { a :: Int, b :: Int }
 # (lex-lang#328).
 fn pair(a :: Int, b :: Int) -> Pair { { a: a, b: b } }
 
-fn equal_check(p :: Pair) -> Option[List[e.Error]] {
+fn equal_check(p :: Pair) -> Option[e.Errors] {
   if p.a == p.b { None }
   else { Some(e.single("a", "mismatch", "a must equal b")) }
 }
 
-fn positive_check(p :: Pair) -> Option[List[e.Error]] {
+fn positive_check(p :: Pair) -> Option[e.Errors] {
   if p.a > 0 and p.b > 0 { None }
   else { Some(e.single("", "non_positive", "both must be > 0")) }
 }
@@ -81,7 +81,7 @@ fn make_pair(a :: Int, b :: Int) -> Pair { { a: a, b: b } }
 fn end_to_end_ok() -> Result[Unit, Str] {
   let r := cm.and_then(
     cm.combine2(Ok(2), Ok(2), make_pair),
-    fn (p :: Pair) -> Result[Pair, List[e.Error]] {
+    fn (p :: Pair) -> Result[Pair, e.Errors] {
       cm.cross_check(p, [equal_check])
     })
   match r {
@@ -93,7 +93,7 @@ fn end_to_end_ok() -> Result[Unit, Str] {
 fn end_to_end_cross_fails() -> Result[Unit, Str] {
   let r := cm.and_then(
     cm.combine2(Ok(2), Ok(3), make_pair),
-    fn (p :: Pair) -> Result[Pair, List[e.Error]] {
+    fn (p :: Pair) -> Result[Pair, e.Errors] {
       cm.cross_check(p, [equal_check])
     })
   match r {

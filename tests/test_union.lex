@@ -14,14 +14,14 @@ type Event =
     Hello({ who :: Str })
   | Goodbye({ who :: Str, reason :: Str })
 
-fn make_hello(j :: jv.Json) -> Result[Event, List[e.Error]] {
+fn make_hello(j :: jv.Json) -> Result[Event, e.Errors] {
   match jv.j_str("", j, "who", [StrMinLen(1)]) {
     Ok(w)   => Ok(Hello({ who: w })),
     Err(es) => Err(es),
   }
 }
 
-fn make_goodbye(j :: jv.Json) -> Result[Event, List[e.Error]] {
+fn make_goodbye(j :: jv.Json) -> Result[Event, e.Errors] {
   cm.combine2(
     jv.j_str("", j, "who",    [StrMinLen(1)]),
     jv.j_str("", j, "reason", [StrMinLen(1)]),
@@ -29,7 +29,7 @@ fn make_goodbye(j :: jv.Json) -> Result[Event, List[e.Error]] {
   )
 }
 
-fn branches() -> List[(Str, (jv.Json) -> Result[Event, List[e.Error]])] {
+fn branches() -> List[(Str, (jv.Json) -> Result[Event, e.Errors])] {
   [("hello", make_hello), ("goodbye", make_goodbye)]
 }
 

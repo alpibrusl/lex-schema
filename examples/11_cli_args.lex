@@ -49,21 +49,21 @@ fn arg_schema() -> s.ModelSchema {
 
 # ---- Pipeline ----------------------------------------------------
 
-fn run_args(argv :: List[Str]) -> Result[jv.Json, List[e.Error]] {
+fn run_args(argv :: List[Str]) -> Result[jv.Json, e.Errors] {
   cl.parse_and_validate_argv(build_spec(), argv, arg_schema())
 }
 
 # ---- Demos --------------------------------------------------------
 
-fn demo_good() -> Result[jv.Json, List[e.Error]] {
+fn demo_good() -> Result[jv.Json, e.Errors] {
   run_args(["./src", "--verbose"])
 }
 
-fn demo_missing_path() -> Result[jv.Json, List[e.Error]] {
+fn demo_missing_path() -> Result[jv.Json, e.Errors] {
   run_args(["--verbose"])
 }
 
-fn demo_bad_output() -> Result[jv.Json, List[e.Error]] {
+fn demo_bad_output() -> Result[jv.Json, e.Errors] {
   run_args(["./src", "--output", "report.pdf"])
 }
 

@@ -38,7 +38,7 @@ fn build(em :: Str, p :: Str, cp :: Str, sd :: Str, ed :: Str) -> Signup {
 
 # ---- Cross-field rules --------------------------------------------
 
-fn passwords_match(u :: Signup) -> Option[List[e.Error]] {
+fn passwords_match(u :: Signup) -> Option[e.Errors] {
   if u.password == u.confirm_password { None }
   else {
     Some(e.single("confirm_password", "mismatch",
@@ -46,7 +46,7 @@ fn passwords_match(u :: Signup) -> Option[List[e.Error]] {
   }
 }
 
-fn end_after_start(u :: Signup) -> Option[List[e.Error]] {
+fn end_after_start(u :: Signup) -> Option[e.Errors] {
   # We accept that both fields parse — the field-level validator
   # already enforced ISO 8601. Here we only check ordering, by
   # comparing canonical-form strings... no, by re-parsing both
@@ -60,7 +60,7 @@ fn end_after_start(u :: Signup) -> Option[List[e.Error]] {
 
 # ---- Validator ----------------------------------------------------
 
-fn validate(raw :: Signup) -> Result[Signup, List[e.Error]] {
+fn validate(raw :: Signup) -> Result[Signup, e.Errors] {
   cm.and_then(
     cm.combine5(
       f.check_str("email",           raw.email,           [StrEmail]),
@@ -70,7 +70,7 @@ fn validate(raw :: Signup) -> Result[Signup, List[e.Error]] {
       f.check_str("end_date",        raw.end_date,        []),
       build
     ),
-    fn (u :: Signup) -> Result[Signup, List[e.Error]] {
+    fn (u :: Signup) -> Result[Signup, e.Errors] {
       cm.cross_check(u, [passwords_match, end_after_start])
     }
   )
@@ -78,7 +78,7 @@ fn validate(raw :: Signup) -> Result[Signup, List[e.Error]] {
 
 # ---- Demos --------------------------------------------------------
 
-fn demo_good() -> Result[Signup, List[e.Error]] {
+fn demo_good() -> Result[Signup, e.Errors] {
   validate({
     email:            "alice@example.com",
     password:         "correcthorse9",
@@ -88,7 +88,7 @@ fn demo_good() -> Result[Signup, List[e.Error]] {
   })
 }
 
-fn demo_mismatched() -> Result[Signup, List[e.Error]] {
+fn demo_mismatched() -> Result[Signup, e.Errors] {
   validate({
     email:            "alice@example.com",
     password:         "correcthorse9",
@@ -98,7 +98,7 @@ fn demo_mismatched() -> Result[Signup, List[e.Error]] {
   })
 }
 
-fn demo_reversed_dates() -> Result[Signup, List[e.Error]] {
+fn demo_reversed_dates() -> Result[Signup, e.Errors] {
   validate({
     email:            "alice@example.com",
     password:         "correcthorse9",

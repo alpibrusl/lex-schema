@@ -126,7 +126,7 @@ fn run_category(
   { category: name, total: total, errored: errored }
 }
 
-fn outcome(body :: Str, schema :: s.ModelSchema) -> Result[jv.Json, List[e.Error]] {
+fn outcome(body :: Str, schema :: s.ModelSchema) -> Result[jv.Json, e.Errors] {
   match jv.parse_into_errors(body) {
     Err(es) => Err(es),
     Ok(j)   => s.validate(schema, j),

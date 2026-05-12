@@ -123,7 +123,7 @@ fn with_desc(field :: Field, desc :: Str) -> Field {
 # emit `code = "missing"`, type mismatches emit `code = "type"`,
 # constraint failures emit per-rule codes.
 
-fn validate(schema :: ModelSchema, j :: jv.Json) -> Result[jv.Json, List[e.Error]] {
+fn validate(schema :: ModelSchema, j :: jv.Json) -> Result[jv.Json, e.Errors] {
   validate_at("", schema, j)
 }
 
@@ -131,13 +131,13 @@ fn validate_at(
   path_prefix :: Str,
   schema :: ModelSchema,
   j :: jv.Json
-) -> Result[jv.Json, List[e.Error]] {
+) -> Result[jv.Json, e.Errors] {
   let walked := list.fold(schema.fields,
     walk_init(),
     fn (
-      acc :: (List[(Str, jv.Json)], List[e.Error]),
+      acc :: (List[(Str, jv.Json)], e.Errors),
       field :: Field
-    ) -> (List[(Str, jv.Json)], List[e.Error]) {
+    ) -> (List[(Str, jv.Json)], e.Errors) {
       let entries := match acc { (es, _errs) => es }
       let errs    := match acc { (_es, errs) => errs }
       match validate_field(path_prefix, field, j) {
@@ -154,14 +154,14 @@ fn validate_at(
 
 # Walker accumulator init — a tuple of (entries-so-far, errors-so-far).
 # `_init` helper to pin the polymorphic empty list types (lex-lang#319).
-fn walk_init() -> (List[(Str, jv.Json)], List[e.Error]) { ([], []) }
+fn walk_init() -> (List[(Str, jv.Json)], e.Errors) { ([], []) }
 
 # Internal three-way result for the field walker — clearer than a
 # Result with an extra "Ok(missing)" tag.
 type FieldOutcome =
     FieldOk(jv.Json)
   | FieldSkip
-  | FieldErr(List[e.Error])
+  | FieldErr(e.Errors)
 
 fn validate_field(
   path_prefix :: Str,
@@ -239,7 +239,7 @@ fn validate_array(
   # Run shape checks first, in parallel with the per-item walk so
   # errors accumulate even if the array has the wrong length.
   let shape_errs := list.fold(shape, [],
-    fn (acc :: List[e.Error], chk :: c.ListCheck) -> List[e.Error] {
+    fn (acc :: e.Errors, chk :: c.ListCheck) -> e.Errors {
       match c.eval_list(chk, list.len(xs)) {
         None      => acc,
         Some(msg) => list.concat(acc, e.single(path, e.code_min_len(), msg)),
@@ -248,9 +248,9 @@ fn validate_array(
   let walked := list.fold(list.enumerate(xs),
     array_walk_init(),
     fn (
-      acc :: (List[jv.Json], List[e.Error]),
+      acc :: (List[jv.Json], e.Errors),
       p :: (Int, jv.Json)
-    ) -> (List[jv.Json], List[e.Error]) {
+    ) -> (List[jv.Json], e.Errors) {
       let items := match acc { (it, _) => it }
       let errs  := match acc { (_, er) => er }
       let i := match p { (a, _) => a }
@@ -268,7 +268,7 @@ fn validate_array(
   if e.is_ok(all) { FieldOk(JList(items)) } else { FieldErr(all) }
 }
 
-fn array_walk_init() -> (List[jv.Json], List[e.Error]) { ([], []) }
+fn array_walk_init() -> (List[jv.Json], e.Errors) { ([], []) }
 
 # ---- JSON Schema export -------------------------------------------
 #

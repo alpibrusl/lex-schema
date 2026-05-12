@@ -2,6 +2,54 @@
 
 All notable changes to lex-pydantic are tracked here.
 
+## [Unreleased] — 0.7.2
+
+### Pinned lex version
+
+- Built against `lex 0.8.2`. The 0.8.2 release closed the last
+  three lex-pydantic-labeled issues:
+  - **#331** — `datetime.before` / `datetime.after` /
+    `datetime.compare` (and a new `std.duration` module with
+    `duration.seconds`).
+  - **#334** — `list.cons` (companion to `list.reverse` which
+    landed earlier).
+  - **#345** — type-alias unfold now recurses through closure
+    params in polymorphic stdlib signatures.
+
+### Removed (workarounds for upstream fixes)
+
+- `instant_sort_key` + `bound_key` in `src/datetime.lex` are
+  gone. `eval_date` calls `datetime.before` / `datetime.after` /
+  `datetime.compare` on parsed `Instant`s directly — no more
+  packing into `YYYYMMDDhhmmss` Ints (#331).
+- Restored `type Errors = List[Error]` in `src/error.lex`.
+  Every `src/*.lex`, `examples/*.lex`, and `tests/*.lex` was
+  swept from `List[e.Error]` back to `e.Errors`. The alias
+  unfolds cleanly through fold reducers now (#345).
+- `array_loop` and `object_loop` in `src/json_value.lex` now use
+  `list.cons` + a single `list.reverse` at the close. JSON
+  parsing is **O(n)** end-to-end (previously O(n²) on nested
+  arrays/objects). The performance note at the top of the file
+  is updated to reflect (#334).
+
+### Verified against
+
+- `lex 0.8.2`.
+- 17 of 17 test suites: 0 failures (~185 cases).
+- 19 of 19 examples run end-to-end.
+- Every `src/*.lex` module `lex check`s cleanly.
+
+### Issue tracker rollup
+
+After 0.8.2, **zero** lex-pydantic-labeled issues remain open. The
+library now compiles and runs against vanilla `lex` with no
+workarounds. Sixteen filed → sixteen closed:
+
+```
+#319 #320 #321 #322 #323 #324 #325 #326 #328 #329
+#331 #332 #334 #337 #338 #339 #345
+```
+
 ## [Unreleased] — 0.7.1
 
 ### Pinned lex version
