@@ -456,3 +456,113 @@ fn elem_path(prefix :: Str, idx :: Int) -> Str {
 # Note: prior versions of this module shipped a hand-rolled
 # `zip_index` here; it's gone now that `list.enumerate` ships
 # in lex 0.8.0 (lex-lang#321).
+
+# ============================================================
+# Mermaid ER diagram export
+# ============================================================
+#
+# Walk the schema and emit a Mermaid `erDiagram` block — the
+# string drops straight into a Markdown fence and renders in
+# GitHub / GitLab / Notion / VS Code preview. Nested
+# `KObject(sub)` fields become entity-to-entity relationships;
+# `KArray(KObject(sub), _)` becomes a one-to-many. Other field
+# kinds render as columns on the parent entity.
+#
+# Output shape:
+#
+#   erDiagram
+#       User {
+#           string name
+#           string email
+#           int age
+#       }
+#       Address {
+#           string street
+#       }
+#       User ||--|| Address : has
+
+fn to_mermaid_er(schema :: ModelSchema) -> Str {
+  let entities := str.join(emit_entities(schema), "\n")
+  let edges := str.join(emit_edges(schema), "\n")
+  let body := if str.is_empty(edges) { entities }
+    else { str.concat(entities, str.concat("\n", edges)) }
+  str.concat("erDiagram\n", body)
+}
+
+# Emit `EntityName { col1 col2 ... }` for every schema in the
+# transitive `KObject` tree, including the root.
+fn emit_entities(schema :: ModelSchema) -> List[Str] {
+  let here := emit_entity(schema)
+  let nested := list.fold(schema.fields, [],
+    fn (acc :: List[Str], field :: Field) -> List[Str] {
+      list.concat(acc, emit_kind_entities(field.kind))
+    })
+  list.concat([here], nested)
+}
+
+fn emit_kind_entities(kind :: FieldKind) -> List[Str] {
+  match kind {
+    KObject(sub)   => emit_entities(sub),
+    KArray(elem,_) => emit_kind_entities(elem),
+    _              => [],
+  }
+}
+
+fn emit_entity(schema :: ModelSchema) -> Str {
+  let cols := list.fold(schema.fields, [],
+    fn (acc :: List[Str], field :: Field) -> List[Str] {
+      list.concat(acc, [emit_column(field)])
+    })
+  str.concat("    ", str.concat(schema.title,
+    str.concat(" {\n",
+      str.concat(str.join(cols, "\n"),
+        "\n    }"))))
+}
+
+fn emit_column(field :: Field) -> Str {
+  # Mermaid columns: `    type name [PK|FK]?`. We don't emit PK
+  # / FK since the schema doesn't carry that metadata; types
+  # map to Mermaid's known column-type vocabulary.
+  let ty := mermaid_type(field.kind)
+  let opt_marker := if field.required { "" } else { " \"optional\"" }
+  str.concat("        ", str.concat(ty, str.concat(" ", str.concat(field.name, opt_marker))))
+}
+
+fn mermaid_type(kind :: FieldKind) -> Str {
+  match kind {
+    KStr(_)        => "string",
+    KInt(_)        => "int",
+    KFloat(_)      => "float",
+    KBool          => "bool",
+    KArray(_,_)    => "array",
+    KObject(sub)   => sub.title,
+  }
+}
+
+# Emit `Parent ||--|| Child : field_name` for each nested
+# object field, and `Parent ||--o{ Child : field_name` for
+# arrays of objects.
+fn emit_edges(schema :: ModelSchema) -> List[Str] {
+  list.fold(schema.fields, [],
+    fn (acc :: List[Str], field :: Field) -> List[Str] {
+      list.concat(acc, edge_for(schema.title, field))
+    })
+}
+
+fn edge_for(parent :: Str, field :: Field) -> List[Str] {
+  match field.kind {
+    KObject(sub) => {
+      let here := str.concat("    ", str.concat(parent,
+        str.concat(" ||--|| ", str.concat(sub.title,
+          str.concat(" : ", field.name)))))
+      list.concat([here], emit_edges(sub))
+    },
+    KArray(KObject(sub), _) => {
+      let here := str.concat("    ", str.concat(parent,
+        str.concat(" ||--o{ ", str.concat(sub.title,
+          str.concat(" : ", field.name)))))
+      list.concat([here], emit_edges(sub))
+    },
+    _ => [],
+  }
+}

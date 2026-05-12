@@ -662,3 +662,95 @@ fn rust_constraint_hint(kind :: s.FieldKind) -> Str {
     _              => "",
   }
 }
+
+# ============================================================
+# Go struct (with encoding/json tags)
+# ============================================================
+#
+# Emits a Go struct per `ModelSchema`. JSON field names map via
+# `` `json:"name"` `` tags (preserving Lex's snake_case rather
+# than Go's PascalCase). Optional fields become pointer types
+# with `omitempty` so missing input round-trips cleanly. The
+# `validator` package is a popular companion for runtime checks
+# in Go — constraint metadata lands in `// ` doc comments so a
+# downstream codegen can transcribe them into struct tags.
+
+fn to_go_struct(schema :: s.ModelSchema) -> Str {
+  let nested := collect_nested(schema)
+  let head := go_struct(schema)
+  let rest := list.map(nested, fn (m :: s.ModelSchema) -> Str { go_struct(m) })
+  let body := str.join(list.concat(rest, [head]), "\n\n")
+  str.concat(go_header(schema), str.concat("\n\n", body))
+}
+
+fn go_header(_schema :: s.ModelSchema) -> Str {
+  "package models"
+}
+
+fn go_struct(schema :: s.ModelSchema) -> Str {
+  let doc := if str.is_empty(schema.description) { "" }
+    else { str.concat("// ", str.concat(schema.description, "\n")) }
+  let fields := list.map(schema.fields, fn (field :: s.Field) -> Str {
+    go_field_line(field)
+  })
+  str.concat(doc,
+    str.concat("type ",
+      str.concat(go_ident(schema.title),
+        str.concat(" struct {\n",
+          str.concat(str.join(fields, "\n"), "\n}")))))
+}
+
+fn go_field_line(field :: s.Field) -> Str {
+  let doc := if str.is_empty(field.description) { "" }
+    else { str.concat("\t// ", str.concat(field.description, "\n")) }
+  let hint := rust_constraint_hint(field.kind)
+  let hint_doc := if str.is_empty(hint) { "" }
+    else { str.concat("\t// constraints: ", str.concat(hint, "\n")) }
+  let ty := go_type(field.kind)
+  let ty_opt := if field.required { ty }
+    else { str.concat("*", ty) }
+  # JSON tag: keep the Lex-side name; add `omitempty` for optional.
+  let tag := if field.required {
+    str.concat("`json:\"", str.concat(field.name, "\"`"))
+  } else {
+    str.concat("`json:\"", str.concat(field.name, ",omitempty\"`"))
+  }
+  str.concat(doc,
+    str.concat(hint_doc,
+      str.concat("\t",
+        str.concat(go_ident(field.name),
+          str.concat(" ", str.concat(ty_opt, str.concat(" ", tag)))))))
+}
+
+fn go_type(kind :: s.FieldKind) -> Str {
+  match kind {
+    KStr(_)        => "string",
+    KInt(_)        => "int64",
+    KFloat(_)      => "float64",
+    KBool          => "bool",
+    KArray(elem,_) => str.concat("[]", go_type(elem)),
+    KObject(sub)   => go_ident(sub.title),
+  }
+}
+
+# Go identifiers must be exported (capitalized first letter) to
+# round-trip through `encoding/json`. We PascalCase the field
+# name, treating `_` and `-` as word separators.
+fn go_ident(name :: Str) -> Str {
+  let segs := list.fold(str.split(name, "_"), [],
+    fn (acc :: List[Str], seg :: Str) -> List[Str] {
+      list.concat(acc, str.split(seg, "-"))
+    })
+  list.fold(segs, "", fn (acc :: Str, seg :: Str) -> Str {
+    str.concat(acc, capitalize(seg))
+  })
+}
+
+fn capitalize(s :: Str) -> Str {
+  if str.is_empty(s) { "" }
+  else {
+    let head := str.to_upper(str.slice(s, 0, 1))
+    let tail := str.slice(s, 1, str.len(s))
+    str.concat(head, tail)
+  }
+}

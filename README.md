@@ -207,6 +207,7 @@ zero workarounds in source.
 | `src/fuzz.lex`          | Malformed-input fuzz driver — every category surfaces as `Err` | ~140 |
 | `src/problem.lex`       | RFC 7807 `problem+json` renderer (presets + serialization) | ~120 |
 | `src/migrate.lex`       | Schema migrations (`Transform` ADT) + backward-compat check | ~320 |
+| `src/form.lex`          | `x-www-form-urlencoded` decoder + dispatch by Content-Type | ~200 |
 
 ## Install
 

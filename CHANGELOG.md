@@ -2,6 +2,54 @@
 
 All notable changes to lex-schema are tracked here.
 
+## [Unreleased] — 0.8.1
+
+### Added
+
+- `src/form.lex` — HTTP form-body decoders. `decode_urlencoded`
+  parses `application/x-www-form-urlencoded` (handles `+`-as-
+  space, `%XX` byte escapes for ASCII, bare-key-as-empty-value,
+  multi-`=`-in-value). `decode_body(body, content_type)`
+  dispatches on Content-Type (accepts the standard
+  `; charset=UTF-8` suffix). `multipart/form-data` is stubbed —
+  v2 will land the full parser.
+- `src/sdk.lex` — `to_go_struct(schema)` emits a Go struct per
+  schema with `encoding/json` tags. PascalCases field names
+  (treating `_` and `-` as word separators), wraps optional
+  fields as `*T` with `omitempty`, drops constraint metadata
+  into `// constraints: ...` doc comments.
+- `src/schema.lex` — `to_mermaid_er(schema)` emits a Mermaid
+  `erDiagram` block. Nested `KObject` fields become
+  `||--||` entity relationships; `KArray(KObject(_), _)`
+  becomes `||--o{`. Output drops straight into Markdown for
+  GitHub / GitLab / Notion / VS Code preview.
+- `examples/21_form_and_diagram.lex` — login-form pipeline
+  (URL-encoded body → `cm.combine3` validation → typed
+  `LoginFields`), plus Mermaid ER diagram + Go struct emitted
+  from the same schema.
+- `tests/test_form.lex` — 10 cases (round-trips, plus
+  edge cases like `%XX`, bare keys, `=` in values, charset
+  suffix).
+- `tests/test_codegen_more.lex` — 12 cases (Go-struct
+  coverage, Mermaid ER coverage).
+
+### Filed upstream
+
+- [`alpibrusl/lex-lang#353`](https://github.com/alpibrusl/lex-lang/issues/353)
+  — package proposal for **`lex-web`**, an HTTP framework
+  on top of `net.serve` that integrates with lex-schema for
+  typed body validation and auto-OpenAPI export. Sketches the
+  ~1000-1500 LoC v0.1 surface and lists `lex-auth` /
+  `lex-orm` / `lex-log` / `lex-trace` as follow-up packages
+  that compose on top.
+
+### Verified against
+
+- `lex 0.8.2`.
+- 23 of 23 test suites: 0 failures (~265 cases).
+- 21 of 21 examples run end-to-end.
+- Every `src/*.lex` module `lex check`s cleanly.
+
 ## [Unreleased] — 0.8.0
 
 ### Renamed
