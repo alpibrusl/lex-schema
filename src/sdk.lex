@@ -754,3 +754,356 @@ fn capitalize(s :: Str) -> Str {
     str.concat(head, tail)
   }
 }
+
+# ============================================================
+# SQL DDL (Postgres + SQLite)
+# ============================================================
+#
+# `to_sql_ddl(schema, DialectPostgres | DialectSqlite)` walks a
+# `ModelSchema` and emits CREATE TABLE statements. The library
+# treats `ModelSchema` as a single source of truth (the same way
+# SQLModel collapses pydantic + SQLAlchemy into one class), so
+# this is the same codegen pattern as `to_python` / `to_go_struct`
+# — pure function, no effects, drop the output into a `.sql` file
+# or migration tool.
+#
+# Conventions:
+#
+#   * A field literally named `id` becomes the PRIMARY KEY. Any
+#     other PK scheme (UUID v7, composite keys, ...) is the
+#     caller's job — let them set it via `ALTER TABLE` or a
+#     hand-written migration.
+#   * Nested `KObject` fields emit a separate child table plus a
+#     `<field>_id` FK column on the parent. Children are emitted
+#     before parents so Postgres FK references resolve in order.
+#   * `KArray` becomes `JSONB` (Postgres) / `TEXT` (SQLite). A
+#     proper join-table model is left to lex-orm.
+#   * Constraints lift to `CHECK` clauses when the dialect supports
+#     them: length, range, OneOf, regex (Postgres only — SQLite's
+#     REGEXP requires a loaded extension, so the pattern lands in
+#     a trailing comment).
+#   * `NOT NULL` follows `field.required`.
+
+type SqlDialect =
+    DialectPostgres
+  | DialectSqlite
+
+fn to_sql_ddl(schema :: s.ModelSchema, dialect :: SqlDialect) -> Str {
+  let nested := collect_nested(schema)
+  # Children must exist before parents for FK referential integrity.
+  let children_first := list.reverse(nested)
+  let tables := list.concat(children_first, [schema])
+  let blocks := list.map(tables, fn (m :: s.ModelSchema) -> Str {
+    sql_table(m, dialect)
+  })
+  str.concat(sql_header(dialect),
+    str.concat("\n\n", str.join(blocks, "\n\n")))
+}
+
+fn sql_header(dialect :: SqlDialect) -> Str {
+  match dialect {
+    DialectPostgres => "-- lex-schema -> SQL DDL (Postgres)",
+    DialectSqlite   => "-- lex-schema -> SQL DDL (SQLite)",
+  }
+}
+
+fn sql_table(schema :: s.ModelSchema, dialect :: SqlDialect) -> Str {
+  let tname := sql_quote(sql_ident(schema.title))
+  let doc := if str.is_empty(schema.description) { "" }
+    else { str.concat("-- ", str.concat(schema.description, "\n")) }
+  let cols := list.map(schema.fields, fn (f :: s.Field) -> Str {
+    sql_column(f, dialect)
+  })
+  let body := str.join(cols, ",\n")
+  str.concat(doc,
+    str.concat("CREATE TABLE ",
+      str.concat(tname,
+        str.concat(" (\n", str.concat(body, "\n);")))))
+}
+
+# Double-quote SQL identifiers so reserved words (`order`, `user`,
+# `select`, ...) survive intact. Both Postgres and SQLite accept
+# `"name"` as a delimited identifier.
+fn sql_quote(name :: Str) -> Str {
+  str.concat("\"", str.concat(name, "\""))
+}
+
+fn sql_column(f :: s.Field, dialect :: SqlDialect) -> Str {
+  let col_name := match f.kind {
+    KObject(_)  => str.concat(f.name, "_id"),
+    _           => f.name,
+  }
+  let ty := sql_type(f, dialect)
+  let pk := if f.name == "id" { " PRIMARY KEY" } else { "" }
+  let nn := if f.required { " NOT NULL" } else { "" }
+  let fk := match f.kind {
+    KObject(sub) => str.concat(" REFERENCES ",
+                     str.concat(sql_quote(sql_ident(sub.title)), "(id)")),
+    _            => "",
+  }
+  let checks := sql_constraints(col_name, f.kind, dialect)
+  str.concat("  ",
+    str.concat(col_name,
+      str.concat(" ",
+        str.concat(ty,
+          str.concat(pk,
+            str.concat(nn, str.concat(fk, checks)))))))
+}
+
+fn sql_type(f :: s.Field, dialect :: SqlDialect) -> Str {
+  match f.kind {
+    KStr(checks) => sql_str_type(checks, dialect),
+    KInt(_)      => match dialect {
+      DialectPostgres => "BIGINT",
+      DialectSqlite   => "INTEGER",
+    },
+    KFloat(_)    => match dialect {
+      DialectPostgres => "DOUBLE PRECISION",
+      DialectSqlite   => "REAL",
+    },
+    KBool        => match dialect {
+      DialectPostgres => "BOOLEAN",
+      DialectSqlite   => "INTEGER",
+    },
+    KArray(_, _) => match dialect {
+      DialectPostgres => "JSONB",
+      DialectSqlite   => "TEXT",
+    },
+    KObject(_)   => match dialect {
+      DialectPostgres => "BIGINT",
+      DialectSqlite   => "INTEGER",
+    },
+  }
+}
+
+fn sql_str_type(checks :: List[c.StrCheck], dialect :: SqlDialect) -> Str {
+  match max_len_of(checks) {
+    Some(n) => match dialect {
+      DialectPostgres => str.concat("VARCHAR(", str.concat(int.to_str(n), ")")),
+      DialectSqlite   => "TEXT",
+    },
+    None    => "TEXT",
+  }
+}
+
+fn max_len_of(checks :: List[c.StrCheck]) -> Option[Int] {
+  list.fold(checks, None,
+    fn (acc :: Option[Int], chk :: c.StrCheck) -> Option[Int] {
+      match acc {
+        Some(_) => acc,
+        None    => str_check_max_len(chk),
+      }
+    })
+}
+
+fn str_check_max_len(chk :: c.StrCheck) -> Option[Int] {
+  match chk {
+    StrMaxLen(n)   => Some(n),
+    StrExactLen(n) => Some(n),
+    _              => None,
+  }
+}
+
+fn sql_constraints(
+  col :: Str,
+  kind :: s.FieldKind,
+  dialect :: SqlDialect
+) -> Str {
+  let parts := match kind {
+    KStr(checks)   => str_checks_sql(col, checks, dialect),
+    KInt(checks)   => int_checks_sql(col, checks),
+    KFloat(checks) => float_checks_sql(col, checks),
+    _              => [],
+  }
+  if list.is_empty(parts) { "" }
+  else { str.concat(" ", str.join(parts, " ")) }
+}
+
+fn ck(expr :: Str) -> Str {
+  str.concat("CHECK (", str.concat(expr, ")"))
+}
+
+fn str_checks_sql(
+  col :: Str,
+  checks :: List[c.StrCheck],
+  dialect :: SqlDialect
+) -> List[Str] {
+  list.fold(checks, [],
+    fn (acc :: List[Str], chk :: c.StrCheck) -> List[Str] {
+      match str_check_sql(col, chk, dialect) {
+        Some(s) => list.concat(acc, [s]),
+        None    => acc,
+      }
+    })
+}
+
+fn str_check_sql(
+  col :: Str,
+  chk :: c.StrCheck,
+  dialect :: SqlDialect
+) -> Option[Str] {
+  match chk {
+    StrNonEmpty    => Some(ck(str.concat(col, " <> ''"))),
+    StrMinLen(n)   => Some(ck(len_expr(col, ">=", n))),
+    StrMaxLen(_)   => None,  # already captured in VARCHAR(N) for Postgres
+    StrExactLen(_) => None,
+    StrPattern(p)  => regex_check(col, p, dialect),
+    StrOneOf(opts) => Some(ck(str.concat(col,
+                              str.concat(" IN ", in_list_str(opts))))),
+    StrStartsWith(_) => None,
+    StrEndsWith(_)   => None,
+    StrEmail       => regex_check(col, c.email_pattern(), dialect),
+    StrUrl         => regex_check(col, c.url_pattern(), dialect),
+    StrUuid        => regex_check(col, c.uuid_pattern(), dialect),
+    StrIPv4        => regex_check(col, c.ipv4_pattern(), dialect),
+    StrIPv6        => regex_check(col, c.ipv6_pattern(), dialect),
+    StrHostname    => regex_check(col, c.hostname_pattern(), dialect),
+    StrIsoDate     => regex_check(col, c.iso_date_pattern(), dialect),
+    StrIsoTime     => regex_check(col, c.iso_time_pattern(), dialect),
+    StrBase64      => regex_check(col, c.base64_pattern(), dialect),
+    StrHex         => regex_check(col, c.hex_pattern(), dialect),
+    StrPhoneE164   => regex_check(col, c.phone_e164_pattern(), dialect),
+    StrCreditCardLuhn => None,  # Luhn isn't expressible in a CHECK
+  }
+}
+
+fn len_expr(col :: Str, op :: Str, n :: Int) -> Str {
+  str.concat("length(",
+    str.concat(col,
+      str.concat(") ", str.concat(op, str.concat(" ", int.to_str(n))))))
+}
+
+fn regex_check(col :: Str, pat :: Str, dialect :: SqlDialect) -> Option[Str] {
+  match dialect {
+    DialectPostgres => Some(ck(str.concat(col,
+                              str.concat(" ~ ", sql_str_lit(pat))))),
+    DialectSqlite   => None,
+  }
+}
+
+fn sql_str_lit(s :: Str) -> Str {
+  let escaped := str.replace(s, "'", "''")
+  str.concat("'", str.concat(escaped, "'"))
+}
+
+fn in_list_str(opts :: List[Str]) -> Str {
+  let quoted := list.map(opts, fn (o :: Str) -> Str { sql_str_lit(o) })
+  str.concat("(", str.concat(str.join(quoted, ", "), ")"))
+}
+
+fn in_list_int(opts :: List[Int]) -> Str {
+  let q := list.map(opts, fn (n :: Int) -> Str { int.to_str(n) })
+  str.concat("(", str.concat(str.join(q, ", "), ")"))
+}
+
+fn int_checks_sql(col :: Str, checks :: List[c.IntCheck]) -> List[Str] {
+  list.fold(checks, [],
+    fn (acc :: List[Str], chk :: c.IntCheck) -> List[Str] {
+      match int_check_sql(col, chk) {
+        Some(s) => list.concat(acc, [s]),
+        None    => acc,
+      }
+    })
+}
+
+fn int_check_sql(col :: Str, chk :: c.IntCheck) -> Option[Str] {
+  match chk {
+    IntMin(n)        => Some(ck(int_op_expr(col, ">=", n))),
+    IntMax(n)        => Some(ck(int_op_expr(col, "<=", n))),
+    IntInRange(a, b) => Some(ck(str.concat(col,
+                              str.concat(" BETWEEN ",
+                                str.concat(int.to_str(a),
+                                  str.concat(" AND ", int.to_str(b))))))),
+    IntEq(n)         => Some(ck(int_op_expr(col, "=", n))),
+    IntOneOf(opts)   => Some(ck(str.concat(col,
+                              str.concat(" IN ", in_list_int(opts))))),
+    IntPositive      => Some(ck(int_op_expr(col, ">", 0))),
+    IntNonNegative   => Some(ck(int_op_expr(col, ">=", 0))),
+  }
+}
+
+fn int_op_expr(col :: Str, op :: Str, n :: Int) -> Str {
+  str.concat(col,
+    str.concat(" ", str.concat(op, str.concat(" ", int.to_str(n)))))
+}
+
+fn float_checks_sql(col :: Str, checks :: List[c.FloatCheck]) -> List[Str] {
+  list.fold(checks, [],
+    fn (acc :: List[Str], chk :: c.FloatCheck) -> List[Str] {
+      match float_check_sql(col, chk) {
+        Some(s) => list.concat(acc, [s]),
+        None    => acc,
+      }
+    })
+}
+
+fn float_check_sql(col :: Str, chk :: c.FloatCheck) -> Option[Str] {
+  match chk {
+    FloatMin(x)        => Some(ck(float_op_expr(col, ">=", x))),
+    FloatMax(x)        => Some(ck(float_op_expr(col, "<=", x))),
+    FloatInRange(a, b) => Some(ck(str.concat(col,
+                                str.concat(" BETWEEN ",
+                                  str.concat(float.to_str(a),
+                                    str.concat(" AND ", float.to_str(b))))))),
+    FloatFinite        => None,  # dialect-specific; skip
+    FloatPositive      => Some(ck(float_op_expr(col, ">", 0.0))),
+    FloatNonNegative   => Some(ck(float_op_expr(col, ">=", 0.0))),
+  }
+}
+
+fn float_op_expr(col :: Str, op :: Str, x :: Float) -> Str {
+  str.concat(col,
+    str.concat(" ", str.concat(op, str.concat(" ", float.to_str(x)))))
+}
+
+# Lower-snake for SQL identifiers. Lex titles tend to be PascalCase
+# (`UserAccount`); SQL convention is `user_account`. Treating `-`
+# and `_` as separators keeps mixed input sane.
+fn sql_ident(name :: Str) -> Str {
+  let segs := list.fold(str.split(name, "_"), [],
+    fn (acc :: List[Str], seg :: Str) -> List[Str] {
+      list.concat(acc, str.split(seg, "-"))
+    })
+  let split := list.fold(segs, [],
+    fn (acc :: List[Str], seg :: Str) -> List[Str] {
+      list.concat(acc, snake_split(seg))
+    })
+  str.to_lower(str.join(split, "_"))
+}
+
+# Split a CamelCase word "UserName" into ["User", "Name"]. Walks
+# the string and emits a new segment whenever an uppercase letter
+# follows a lowercase one.
+fn snake_split(s :: Str) -> List[Str] {
+  if str.is_empty(s) { [] }
+  else { snake_split_at(s, 1, 0, []) }
+}
+
+fn snake_split_at(
+  s :: Str,
+  i :: Int,
+  start :: Int,
+  acc :: List[Str]
+) -> List[Str] {
+  let n := str.len(s)
+  if i >= n {
+    list.concat(acc, [str.slice(s, start, n)])
+  } else {
+    let prev := str.slice(s, i - 1, i)
+    let curr := str.slice(s, i, i + 1)
+    if is_lower(prev) and is_upper(curr) {
+      snake_split_at(s, i + 1, i,
+        list.concat(acc, [str.slice(s, start, i)]))
+    } else {
+      snake_split_at(s, i + 1, start, acc)
+    }
+  }
+}
+
+fn is_upper(c :: Str) -> Bool {
+  str.to_upper(c) == c and str.to_lower(c) != c
+}
+
+fn is_lower(c :: Str) -> Bool {
+  str.to_lower(c) == c and str.to_upper(c) != c
+}

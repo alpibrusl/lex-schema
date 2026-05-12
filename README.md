@@ -171,14 +171,15 @@ doesn't model. lex-schema covers the gap with:
 
 ## Status
 
-Pre-1.0. The surface is small (19 modules, ~3300 lines of pure Lex),
+Pre-1.0. The surface is small (19 modules, ~3700 lines of pure Lex),
 and stable in the sense that no breaking changes are planned for the
 listed API. Verified against lex-lang `v0.8.2`:
 
 - Every `src/` module type-checks (`lex check`).
-- Every test suite returns `run_all = 0` (~285 cases across 24 suites).
-- Every `examples/` demo runs end-to-end (22 examples).
-- `multipart/form-data` is now first-class — no remaining v1 stubs.
+- Every test suite returns `run_all = 0` (~308 cases across 25 suites).
+- Every `examples/` demo runs end-to-end (23 examples).
+- `multipart/form-data` is first-class; SQL DDL codegen joins the
+  TS/Python/Zod/Rust/Go quartet.
 
 CHANGELOG carries the exact `lex --version` used. **All seventeen
 ergonomic / correctness issues this library filed against lex-lang
@@ -202,7 +203,7 @@ zero workarounds in source.
 | `src/schema.lex`        | `ModelSchema` value + schema-driven `validate` + JSON Schema / OpenAPI export | ~310 |
 | `src/schema_import.lex` | JSON Schema → `ModelSchema` (inverse of `to_json_schema`) | ~220 |
 | `src/cli.lex`           | `std.cli` ↔ `ModelSchema` bridge (`parse_and_validate_argv`) | ~80 |
-| `src/sdk.lex`           | `ModelSchema` → TypeScript / Python codegen for client SDKs | ~340 |
+| `src/sdk.lex`           | `ModelSchema` → TS / Python / Zod / Rust / Go / SQL DDL codegen | ~1050 |
 | `src/property.lex`      | Schema-driven sample generation + round-trip property check | ~310 |
 | `src/validator.lex`     | `Validator` bundle (schema + pre-computed exports + validate) | ~70 |
 | `src/fuzz.lex`          | Malformed-input fuzz driver — every category surfaces as `Err` | ~140 |
@@ -490,14 +491,24 @@ v.summary(val)                       -> Str   # "Validator{title=..., fields=N}"
 ### SDK codegen (`sdk`)
 
 ```lex
-sdk.to_typescript(schema)    # export interface User { ... }
-sdk.to_python(schema)        # class User(BaseModel): ...
+sdk.to_typescript(schema)                       # export interface User { ... }
+sdk.to_python(schema)                           # class User(BaseModel): ...
+sdk.to_zod(schema)                              # export const User = z.object({ ... })
+sdk.to_rust_struct(schema)                      # pub struct User { ... } (#[derive(Serialize, Deserialize)])
+sdk.to_go_struct(schema)                        # type User struct { ... `json:"..."` }
+sdk.to_sql_ddl(schema, DialectPostgres)         # CREATE TABLE "user" (...)
+sdk.to_sql_ddl(schema, DialectSqlite)           # CREATE TABLE "user" (...)
 ```
 
-`StrOneOf` renders as `"a" | "b"` (TS) / `Literal["a", "b"]` (Py).
-Nested records emit their own interface/class. Optional fields use
-`?:` / `Optional[T]`. Constraint catalog maps to JSDoc hints (TS)
-and pydantic field args (Py).
+`StrOneOf` renders as `"a" | "b"` (TS) / `Literal["a", "b"]` (Py)
+/ `z.enum(...)` (Zod) / `IN (...)` (SQL). Nested records emit their
+own interface/class/table; SQL nesting becomes a child table plus a
+`<field>_id` FK column. Optional fields use `?:` / `Optional[T]` /
+`.optional()` / `Option<T>` / `*T` + `omitempty` / `NULL`-able.
+Constraints lift where the target supports them: JSDoc hints (TS),
+pydantic field args (Py), Zod chains, doc comments (Rust/Go), or
+`CHECK` clauses (SQL — Postgres includes regex matches; SQLite
+omits them because `REGEXP` requires a loadable extension).
 
 ### CLI integration (`cli`)
 
@@ -600,6 +611,7 @@ exact invocation.
 | `20_payments_api.lex`          | Combined tour: format validators (IPv4, Luhn, phone E.164) + RFC 7807 + 4-target codegen + v1→v2 migration |
 | `21_form_and_diagram.lex`      | URL-encoded login → `cm.combine3` → typed `LoginFields`; same schema → Mermaid ER + Go struct |
 | `22_multipart_upload.lex`      | Avatar upload: `multipart/form-data` → `decode_multipart` → text fields validated + file metadata extracted |
+| `23_sql_ddl.lex`               | Same `ModelSchema` → `CREATE TABLE` for Postgres and SQLite; nested object → child table + FK |
 
 Run the bad-input demos to see the full error trail:
 
@@ -679,10 +691,12 @@ Three concrete payoffs:
 1. **Inspectable by `lex audit`.** `lex audit --calls StrPattern`
    lists every regex constraint in a tree. Closures vanish into
    call-site bodies.
-2. **Codegen-friendly.** `sdk.to_typescript`, `to_python`, and
+2. **Codegen-friendly.** `sdk.to_typescript`, `to_python`, `to_zod`,
+   `to_rust_struct`, `to_go_struct`, `to_sql_ddl`, and
    `s.to_json_schema` all walk the constraint list and emit
-   appropriate annotations / Field-args / JSON Schema keywords.
-   A closure-based design would lose this for free.
+   appropriate annotations / Field-args / Zod chains / `CHECK`
+   clauses / JSON Schema keywords. A closure-based design would
+   lose this for free.
 3. **Cheaper.** A variant is a tagged record; a closure carries
    captures + an indirect call.
 

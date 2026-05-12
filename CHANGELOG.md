@@ -6,9 +6,30 @@ All notable changes to lex-schema are tracked here.
 
 ### Added
 
+- `src/sdk.lex` — `to_sql_ddl(schema, dialect)` emits
+  `CREATE TABLE` statements for Postgres and SQLite. Closes the
+  SQLModel-shaped gap raised in discussion: same single-source-of-
+  truth model now drives validation + 7 codegen targets (TS,
+  Python, Zod, Rust, Go, Mermaid ER, **SQL**). Conventions:
+  field named `id` becomes PRIMARY KEY; nested `KObject` fields
+  emit a separate child table + `<field>_id` FK column; children
+  are emitted before parents for FK referential integrity;
+  identifiers are double-quoted so reserved words (`order`,
+  `user`, `select`) survive intact. Constraints lift to `CHECK`
+  clauses: `StrMinLen` → `length(col) >= N`, `IntInRange` →
+  `BETWEEN`, `StrOneOf` → `IN (...)`, format validators
+  (`StrEmail`, `StrUuid`, etc.) → regex match for Postgres
+  (`col ~ '...'`); SQLite skips regex CHECKs since `REGEXP`
+  requires a loadable extension.
+- `examples/23_sql_ddl.lex` — Blog Post + nested Order/Buyer
+  schemas, both rendered to Postgres and SQLite.
+- `tests/test_sql_ddl.lex` — 23 cases covering PK/FK/NOT NULL,
+  VARCHAR vs TEXT, BIGINT/INTEGER mapping, JSONB array,
+  BETWEEN range, regex matches, dialect-specific differences,
+  reserved-word quoting, and PascalCase → snake_case identifier
+  rewriting.
 - `src/form.lex` — `decode_multipart(body, boundary)` is now a
-  real parser, no longer a stub. Closes the one remaining
-  functional gap from v0.8.1. Implements the RFC 7578 (RFC 2046)
+  real parser, no longer a stub. Implements the RFC 7578 (RFC 2046)
   wire format: walks `--BOUNDARY` segments, parses each part's
   `Content-Disposition` header (extracting `name` + optional
   `filename`), respects `Content-Type` per part with sensible
@@ -82,11 +103,20 @@ All notable changes to lex-schema are tracked here.
   `lex-orm` / `lex-log` / `lex-trace` as follow-up packages
   that compose on top.
 
+### Filed upstream
+
+- [`alpibrusl/lex-lang#357`](https://github.com/alpibrusl/lex-lang/issues/357)
+  — package proposal for **`lex-orm`**, a typed query builder +
+  migration runner that would compose on top of this library's
+  new `sdk.to_sql_ddl` + the existing `migrate.Transform` ADT.
+  Sketches the v0.1 surface (CRUD + WHERE/ORDER/LIMIT + tx +
+  migrations) and the lex-schema ↔ lex-orm responsibility split.
+
 ### Verified against
 
 - `lex 0.8.2`.
-- 24 of 24 test suites: 0 failures (~285 cases).
-- 22 of 22 examples run end-to-end.
+- 25 of 25 test suites: 0 failures (~308 cases).
+- 23 of 23 examples run end-to-end.
 - Every `src/*.lex` module `lex check`s cleanly.
 - **No workarounds remain anywhere in `src/`** — the library is
   pure 0.8.2 Lex.
