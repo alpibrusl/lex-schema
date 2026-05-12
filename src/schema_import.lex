@@ -54,7 +54,7 @@ fn parse_model_at(
   let description := str_field_or(j, "description", "")
   let required_set := required_names(j)
   match jv.get_field(j, "properties") {
-    None    => Ok(s.mk_model(title, description, [])),
+    None    => Ok({ title: title, description: description, fields: [] }),
     Some(p) => match jv.as_obj(p) {
       None       => Err(e.single(join_path(path, "properties"),
                                   e.code_type(),
@@ -78,7 +78,7 @@ fn parse_model_at(
         let fields := match walked { (f, _) => f }
         let errs   := match walked { (_, e) => e }
         if e.is_ok(errs) {
-          Ok(s.mk_model(title, description, fields))
+          Ok({ title: title, description: description, fields: fields })
         } else { Err(errs) }
       },
     },
@@ -96,7 +96,9 @@ fn parse_field(
   let desc := str_field_or(j, "description", "")
   match parse_kind(path, j) {
     Err(es)   => Err(es),
-    Ok(kind)  => Ok(s.mk_field(name, required, desc, kind)),
+    Ok(kind)  => Ok({
+      name: name, required: required, description: desc, kind: kind,
+    }),
   }
 }
 

@@ -118,27 +118,12 @@ fn run_category(
 ) -> Tally {
   let total := list.len(inputs)
   let errored := list.fold(inputs, 0, fn (acc :: Int, body :: Str) -> Int {
-    inc_if_err(acc, outcome(body, schema))
+    match outcome(body, schema) {
+      Ok(_)  => acc,
+      Err(_) => acc + 1,
+    }
   })
-  mk_tally(name, total, errored)
-}
-
-# Lifted-to-top-level helper for lex-lang#337: pattern matching on
-# the Result inside the fold closure leaks the scrutinee onto the
-# stack, polluting subsequent fold steps. Putting the match in its
-# own call frame contains the leak.
-fn inc_if_err(acc :: Int, r :: Result[jv.Json, List[e.Error]]) -> Int {
-  match r {
-    Ok(_)  => acc,
-    Err(_) => acc + 1,
-  }
-}
-
-# Constructor for Tally so the record-alias coercion (lex-lang#328)
-# fires at the top of the function return rather than nested inside
-# a fold result.
-fn mk_tally(category :: Str, total :: Int, errored :: Int) -> Tally {
-  { category: category, total: total, errored: errored }
+  { category: name, total: total, errored: errored }
 }
 
 fn outcome(body :: Str, schema :: s.ModelSchema) -> Result[jv.Json, List[e.Error]] {

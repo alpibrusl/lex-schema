@@ -46,28 +46,6 @@ type ParseErr = { pos :: Int, message :: Str }
 # Encoded as Result so it threads cleanly through `match`.
 type ParseStep = { pos :: Int, value :: Json }
 
-# ---- Helper constructors ------------------------------------------
-#
-# Lex's record-alias unfolding only triggers when a Record and a
-# Con(alias) meet at the *top* of a unification pair. Once they're
-# nested under another constructor (`Result[Json, ParseErr]`,
-# `Option[StringStep]`, ...) the coercion stops applying. The cure
-# is to call a helper whose return type is the alias name — the
-# constructor's return type pins the produced value to the
-# nominal form so callers see `ParseErr` end-to-end.
-
-fn mk_err(pos :: Int, message :: Str) -> ParseErr {
-  { pos: pos, message: message }
-}
-
-fn mk_step(pos :: Int, value :: Json) -> ParseStep {
-  { pos: pos, value: value }
-}
-
-fn mk_string_step(pos :: Int, text :: Str) -> StringStep {
-  { pos: pos, text: text }
-}
-
 # ---- Public entry point -------------------------------------------
 
 # Parse a complete JSON document. Trailing whitespace is allowed
@@ -80,7 +58,7 @@ fn parse(src :: Str) -> Result[Json, ParseErr] {
       if end == str.len(src) {
         Ok(step.value)
       } else {
-        Err(mk_err(end, "trailing characters after JSON value"))
+        Err({ pos: end, message: "trailing characters after JSON value" })
       }
     },
   }
@@ -102,7 +80,7 @@ fn parse_into_errors(src :: Str) -> Result[Json, List[e.Error]] {
 fn parse_value(src :: Str, p :: Int) -> Result[ParseStep, ParseErr] {
   let p1 := skip_ws(src, p)
   if p1 >= str.len(src) {
-    Err(mk_err(p1, "unexpected end of input"))
+    Err({ pos: p1, message: "unexpected end of input" })
   } else {
     let c := char_at(src, p1)
     match c {
@@ -139,13 +117,13 @@ fn parse_literal(
 ) -> Result[ParseStep, ParseErr] {
   let n := str.len(word)
   if p + n > str.len(src) {
-    Err(mk_err(p, str.concat("expected `", str.concat(word, "`"))))
+    Err({ pos: p, message: str.concat("expected `", str.concat(word, "`")) })
   } else {
     let seen := str.slice(src, p, p + n)
     if seen == word {
-      Ok(mk_step(p + n, value))
+      Ok({ pos: p + n, value: value })
     } else {
-      Err(mk_err(p, str.concat("expected `", str.concat(word, "`"))))
+      Err({ pos: p, message: str.concat("expected `", str.concat(word, "`")) })
     }
   }
 }
@@ -170,7 +148,7 @@ fn parse_number(src :: Str, p :: Int) -> Result[ParseStep, ParseErr] {
   let p1 := if char_at(src, p) == "-" { p + 1 } else { p }
   let p2 := skip_digits(src, p1)
   if p2 == p1 {
-    Err(mk_err(p, "expected number"))
+    Err({ pos: p, message: "expected number" })
   } else {
     let p3 := if peek_char(src, p2) == "." {
       skip_digits(src, p2 + 1)
@@ -184,16 +162,16 @@ fn parse_number(src :: Str, p :: Int) -> Result[ParseStep, ParseErr] {
     # Integer if no `.`, `e`, or `E` consumed.
     if p3 == p2 and p4 == p3 {
       match str.to_int(text) {
-        Some(n) => Ok(mk_step(p4, JInt(n))),
+        Some(n) => Ok({ pos: p4, value: JInt(n) }),
         None    => match str.to_float(text) {
-          Some(x) => Ok(mk_step(p4, JFloat(x))),
-          None    => Err(mk_err(start, "invalid number")),
+          Some(x) => Ok({ pos: p4, value: JFloat(x) }),
+          None    => Err({ pos: start, message: "invalid number" }),
         },
       }
     } else {
       match str.to_float(text) {
-        Some(x) => Ok(mk_step(p4, JFloat(x))),
-        None    => Err(mk_err(start, "invalid number")),
+        Some(x) => Ok({ pos: p4, value: JFloat(x) }),
+        None    => Err({ pos: start, message: "invalid number" }),
       }
     }
   }
@@ -234,7 +212,7 @@ fn is_digit(c :: Str) -> Bool {
 fn parse_string_value(src :: Str, p :: Int) -> Result[ParseStep, ParseErr] {
   match parse_string_raw(src, p) {
     Err(e1) => Err(e1),
-    Ok(r)   => Ok(mk_step(r.pos, JStr(r.text))),
+    Ok(r)   => Ok({ pos: r.pos, value: JStr(r.text) }),
   }
 }
 
@@ -244,7 +222,7 @@ type StringStep = { pos :: Int, text :: Str }
 # used both for top-level strings and for object keys.
 fn parse_string_raw(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
   if char_at(src, p) != "\"" {
-    Err(mk_err(p, "expected `\"`"))
+    Err({ pos: p, message: "expected `\"`" })
   } else {
     # Two-cursor scan: `chunk_start` marks the start of the current
     # escape-free run, `p` is the read head. We only `str.concat`
@@ -263,13 +241,13 @@ fn str_loop(
   acc :: Str
 ) -> Result[StringStep, ParseErr] {
   if p >= str.len(src) {
-    Err(mk_err(p, "unterminated string"))
+    Err({ pos: p, message: "unterminated string" })
   } else {
     let c := char_at(src, p)
     if c == "\"" {
       let chunk := str.slice(src, chunk_start, p)
       let out := if str.is_empty(acc) { chunk } else { str.concat(acc, chunk) }
-      Ok(mk_string_step(p + 1, out))
+      Ok({ pos: p + 1, text: out })
     } else {
       if c == "\\" {
         let chunk := str.slice(src, chunk_start, p)
@@ -289,7 +267,7 @@ fn str_loop(
 
 fn parse_escape(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
   if p >= str.len(src) {
-    Err(mk_err(p, "unterminated escape"))
+    Err({ pos: p, message: "unterminated escape" })
   } else {
     let c := char_at(src, p)
     # Lex's string-literal grammar supports `\n`, `\t`, `\r`, `\\`,
@@ -299,16 +277,16 @@ fn parse_escape(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
     # and error on the rest with a clear message so callers can
     # decide whether to pre-process input or open a bug.
     match c {
-      "\"" => Ok(mk_string_step(p + 1, "\"")),
-      "\\" => Ok(mk_string_step(p + 1, "\\")),
-      "/"  => Ok(mk_string_step(p + 1, "/")),
-      "n"  => Ok(mk_string_step(p + 1, "\n")),
-      "r"  => Ok(mk_string_step(p + 1, "\r")),
-      "t"  => Ok(mk_string_step(p + 1, "\t")),
-      "b"  => Err(mk_err(p, "`\\b` escape not yet supported")),
-      "f"  => Err(mk_err(p, "`\\f` escape not yet supported")),
-      "u"  => Err(mk_err(p, "`\\uXXXX` escapes not yet supported")),
-      _    => Err(mk_err(p, str.concat("invalid escape `\\", str.concat(c, "`")))),
+      "\"" => Ok({ pos: p + 1, text: "\"" }),
+      "\\" => Ok({ pos: p + 1, text: "\\" }),
+      "/"  => Ok({ pos: p + 1, text: "/" }),
+      "n"  => Ok({ pos: p + 1, text: "\n" }),
+      "r"  => Ok({ pos: p + 1, text: "\r" }),
+      "t"  => Ok({ pos: p + 1, text: "\t" }),
+      "b"  => Err({ pos: p, message: "`\\b` escape not yet supported" }),
+      "f"  => Err({ pos: p, message: "`\\f` escape not yet supported" }),
+      "u"  => Err({ pos: p, message: "`\\uXXXX` escapes not yet supported" }),
+      _    => Err({ pos: p, message: str.concat("invalid escape `\\", str.concat(c, "`")) }),
     }
   }
 }
@@ -317,11 +295,11 @@ fn parse_escape(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
 
 fn parse_array(src :: Str, p :: Int) -> Result[ParseStep, ParseErr] {
   if char_at(src, p) != "[" {
-    Err(mk_err(p, "expected `[`"))
+    Err({ pos: p, message: "expected `[`" })
   } else {
     let p1 := skip_ws(src, p + 1)
     if peek_char(src, p1) == "]" {
-      Ok(mk_step(p1 + 1, JList([])))
+      Ok({ pos: p1 + 1, value: JList([]) })
     } else {
       array_loop(src, p1, [])
     }
@@ -339,9 +317,9 @@ fn array_loop(
       let acc2 := list.concat(acc, [step.value])
       let p1 := skip_ws(src, step.pos)
       match peek_char(src, p1) {
-        "]" => Ok(mk_step(p1 + 1, JList(acc2))),
+        "]" => Ok({ pos: p1 + 1, value: JList(acc2) }),
         "," => array_loop(src, skip_ws(src, p1 + 1), acc2),
-        _   => Err(mk_err(p1, "expected `,` or `]`")),
+        _   => Err({ pos: p1, message: "expected `,` or `]`" }),
       }
     },
   }
@@ -351,11 +329,11 @@ fn array_loop(
 
 fn parse_object(src :: Str, p :: Int) -> Result[ParseStep, ParseErr] {
   if char_at(src, p) != "{" {
-    Err(mk_err(p, "expected `{`"))
+    Err({ pos: p, message: "expected `{`" })
   } else {
     let p1 := skip_ws(src, p + 1)
     if peek_char(src, p1) == "}" {
-      Ok(mk_step(p1 + 1, JObj([])))
+      Ok({ pos: p1 + 1, value: JObj([]) })
     } else {
       object_loop(src, p1, [])
     }
@@ -372,7 +350,7 @@ fn object_loop(
     Ok(key) => {
       let p1 := skip_ws(src, key.pos)
       if peek_char(src, p1) != ":" {
-        Err(mk_err(p1, "expected `:` after object key"))
+        Err({ pos: p1, message: "expected `:` after object key" })
       } else {
         match parse_value(src, p1 + 1) {
           Err(e1)   => Err(e1),
@@ -380,9 +358,9 @@ fn object_loop(
             let acc2 := list.concat(acc, [(key.text, step.value)])
             let p2 := skip_ws(src, step.pos)
             match peek_char(src, p2) {
-              "}" => Ok(mk_step(p2 + 1, JObj(acc2))),
+              "}" => Ok({ pos: p2 + 1, value: JObj(acc2) }),
               "," => object_loop(src, skip_ws(src, p2 + 1), acc2),
-              _   => Err(mk_err(p2, "expected `,` or `}`")),
+              _   => Err({ pos: p2, message: "expected `,` or `}`" }),
             }
           },
         }

@@ -262,8 +262,7 @@ fn check_list_of[T](
   per_item :: (Str, T) -> Result[T, List[e.Error]]
 ) -> Result[List[T], List[e.Error]] {
   let shape_errs := run_list_checks(name, list.len(xs), shape_checks)
-  let indexed := zip_index(xs)
-  let item_errs := list.fold(indexed, [],
+  let item_errs := list.fold(list.enumerate(xs), [],
     fn (acc :: List[e.Error], p :: (Int, T)) -> List[e.Error] {
       let i := fst_pair(p)
       let v := snd_pair(p)
@@ -302,20 +301,6 @@ fn item_path(name :: Str, idx :: Int) -> Str {
   str.concat(str.concat(name, "["), str.concat(int.to_str(idx), "]"))
 }
 
-# Pair each element with its 0-based index. Re-implemented locally
-# because std.list doesn't expose `enumerate` (and we want to avoid
-# pulling extra deps).
-fn zip_index[T](xs :: List[T]) -> List[(Int, T)] {
-  let final := list.fold(xs, zip_index_init(),
-    fn (acc :: (Int, List[(Int, T)]), x :: T) -> (Int, List[(Int, T)]) {
-      let i := match acc { (a, _) => a }
-      let prev := match acc { (_, b) => b }
-      (i + 1, list.concat(prev, [(i, x)]))
-    })
-  match final { (_, out) => out }
-}
-
-# Polymorphic empty accumulator — lets `list.fold`'s `B` parameter
-# pin the inner element type via ordinary return-type inference
-# (Lex has no inline `(expr :: Type)` ascription).
-fn zip_index_init[T]() -> (Int, List[(Int, T)]) { (0, []) }
+# `list.enumerate` landed in lex 0.8.0 (lex-lang#321); we use it
+# directly above instead of the hand-rolled zip-fold this module
+# used to ship.

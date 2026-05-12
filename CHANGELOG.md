@@ -2,6 +2,68 @@
 
 All notable changes to lex-pydantic are tracked here.
 
+## [Unreleased] — 0.7.1
+
+### Pinned lex version
+
+- Now built against `lex 0.8.0`. The previous v0.7.x line built
+  against `lex 0.7.1`; 0.8.0 closes thirteen of the fifteen
+  lex-lang issues this library filed during v0.1-v0.7. The cleanup
+  in this release removes the workarounds for them.
+
+### Removed (workarounds for upstream fixes)
+
+- `mk_err` / `mk_step` / `mk_string_step` in `src/json_value.lex`,
+  `mk_model` / `mk_field` in `src/schema.lex`, and `mk_tally` /
+  `inc_if_err` in `src/fuzz.lex` are gone. The inline record
+  literals now coerce to the nominal aliases through nested
+  constructors thanks to **lex-lang#328**.
+- `re_match` wrapper in `src/constraints.lex` is gone; the regex
+  checks now call `regex.is_match_str(pattern, s)` directly —
+  **lex-lang#326**.
+- `zip_index` / `zip_index_init` in `src/field.lex`,
+  `src/schema.lex`, and `examples/03_list_of_items.lex` are gone;
+  callers use `list.enumerate(xs)` directly — **lex-lang#321**.
+- Lifted-helper workaround for **lex-lang#337**
+  (`is_email` / `is_url` / `is_uuid` / `is_one_of` top-level
+  helpers in `src/property.lex`, ditto in
+  `tests/test_schema_import.lex`) is gone. Inline
+  `acc or match chk { Variant => true, _ => false }` works
+  cleanly under the fixed PConstructor compilation.
+
+### Held over (workarounds still required)
+
+- `instant_sort_key` in `src/datetime.lex` — still packs
+  `Instant` into a 14-digit Int via `to_components` because
+  **lex-lang#331** (Instant/Duration comparison surface) is open.
+- `List[e.Error]` spelled directly throughout — **lex-lang#323**
+  is *partially* closed in 0.8.0 (simple positions work) but
+  the alias unfold doesn't reach polymorphic stdlib closures.
+  Filed as **lex-lang#345** follow-up.
+
+### Issues filed
+
+- [`#345`](https://github.com/alpibrusl/lex-lang/issues/345) —
+  follow-up to #323: type-alias unfold doesn't reach fresh
+  type-variables in polymorphic-stdlib closure params (e.g.,
+  `list.fold` reducer annotated with an alias).
+
+### Verified against
+
+- `lex 0.8.0` (HEAD of `main` at the 0.8.0 tag).
+- 17 of 17 test suites: 0 failures (~185 cases).
+- 19 of 19 examples run end-to-end.
+- Every `src/*.lex` module `lex check`s cleanly.
+
+### Issue tracker rollup
+
+After 0.8.0, the open lex-pydantic-labeled issues drop from 16 to
+3 (one was re-opened as #345 above):
+
+- **#331** Instant / Duration comparison surface.
+- **#334** `list.cons` (only `list.reverse` shipped in 0.8.0).
+- **#345** `List[alias]` in polymorphic closure params.
+
 ## [Unreleased] — 0.7.0
 
 ### Added

@@ -77,7 +77,7 @@ fn validate_items(raws :: List[RawItem]) -> Result[List[LineItem], List[e.Error]
   # carry the correct element type (`LineItem`, not `RawItem`).
   match f.check_list_shape("items", raws, [ListNonEmpty, ListMaxLen(50)]) {
     Err(es) => Err(es),
-    Ok(_)   => cm.traverse(zip_index(raws), fn (p :: (Int, RawItem)) -> Result[LineItem, List[e.Error]] {
+    Ok(_)   => cm.traverse(list.enumerate(raws), fn (p :: (Int, RawItem)) -> Result[LineItem, List[e.Error]] {
       let i := match p { (a, _) => a }
       let v := match p { (_, b) => b }
       validate_item(item_label(i), v)
@@ -107,18 +107,6 @@ fn parse_order(input :: Str) -> Result[Order, List[e.Error]] {
 fn item_label(i :: Int) -> Str {
   str.concat(str.concat("items[", int.to_str(i)), "]")
 }
-
-fn zip_index[T](xs :: List[T]) -> List[(Int, T)] {
-  let final := list.fold(xs, zip_index_init(),
-    fn (acc :: (Int, List[(Int, T)]), x :: T) -> (Int, List[(Int, T)]) {
-      let i := match acc { (a, _) => a }
-      let prev := match acc { (_, b) => b }
-      (i + 1, list.concat(prev, [(i, x)]))
-    })
-  match final { (_, out) => out }
-}
-
-fn zip_index_init[T]() -> (Int, List[(Int, T)]) { (0, []) }
 
 # ---- Demo entrypoints ---------------------------------------------
 

@@ -84,18 +84,15 @@ fn parses_email_format() -> Result[Unit, Str] {
       Some(f) => match f.kind {
         KStr(checks) => {
           let has_email := list.fold(checks, false,
-            fn (acc :: Bool, chk :: c.StrCheck) -> Bool { acc or is_email(chk) })
+            fn (acc :: Bool, chk :: c.StrCheck) -> Bool {
+              acc or match chk { StrEmail => true, _ => false }
+            })
           if has_email { Ok(()) } else { Err("StrEmail missing") }
         },
         _ => Err("not KStr"),
       },
     },
   }
-}
-
-# Wrap the match in a top-level fn to dodge lex-lang#337.
-fn is_email(chk :: c.StrCheck) -> Bool {
-  match chk { StrEmail => true, _ => false }
 }
 
 import "../src/constraints" as c

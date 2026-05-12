@@ -113,19 +113,6 @@ fn with_desc(field :: Field, desc :: Str) -> Field {
   }
 }
 
-# Constructors for callers that build the records themselves —
-# `schema_import.lex`, dynamic schema builders, etc. The return
-# type pins the nominal alias so the record-coercion gap from
-# lex-lang#328 doesn't bite when these values flow through
-# nested `Result[ModelSchema, ...]` shapes.
-fn mk_model(title :: Str, description :: Str, fields :: List[Field]) -> ModelSchema {
-  { title: title, description: description, fields: fields }
-}
-
-fn mk_field(name :: Str, required :: Bool, description :: Str, kind :: FieldKind) -> Field {
-  { name: name, required: required, description: description, kind: kind }
-}
-
 # ---- Validation ---------------------------------------------------
 
 # Run the schema against a `Json` value. The return value is a
@@ -258,7 +245,7 @@ fn validate_array(
         Some(msg) => list.concat(acc, e.single(path, e.code_min_len(), msg)),
       }
     })
-  let walked := list.fold(zip_index(xs),
+  let walked := list.fold(list.enumerate(xs),
     array_walk_init(),
     fn (
       acc :: (List[jv.Json], List[e.Error]),
@@ -455,14 +442,6 @@ fn elem_path(prefix :: Str, idx :: Int) -> Str {
   str.concat(prefix, str.concat("[", str.concat(int.to_str(idx), "]")))
 }
 
-fn zip_index[T](xs :: List[T]) -> List[(Int, T)] {
-  let final := list.fold(xs, zip_index_init(),
-    fn (acc :: (Int, List[(Int, T)]), x :: T) -> (Int, List[(Int, T)]) {
-      let i := match acc { (a, _) => a }
-      let prev := match acc { (_, b) => b }
-      (i + 1, list.concat(prev, [(i, x)]))
-    })
-  match final { (_, out) => out }
-}
-
-fn zip_index_init[T]() -> (Int, List[(Int, T)]) { (0, []) }
+# Note: prior versions of this module shipped a hand-rolled
+# `zip_index` here; it's gone now that `list.enumerate` ships
+# in lex 0.8.0 (lex-lang#321).

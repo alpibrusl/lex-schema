@@ -175,48 +175,27 @@ fn gen_str(checks :: List[c.StrCheck], rng :: Rng) -> (jv.Json, Rng) {
   } } } }
 }
 
-# Lifted to top-level helpers because lex-lang#337 makes
-# `acc or match chk { ... }` panic at runtime when the variant
-# pattern fails — the scrutinee leaks onto the stack. Wrapping
-# the match in its own function frame isolates the leak.
-
-fn is_email(chk :: c.StrCheck) -> Bool {
-  match chk { StrEmail => true, _ => false }
-}
-
-fn is_url(chk :: c.StrCheck) -> Bool {
-  match chk { StrUrl => true, _ => false }
-}
-
-fn is_uuid(chk :: c.StrCheck) -> Bool {
-  match chk { StrUuid => true, _ => false }
-}
-
-fn is_one_of(chk :: c.StrCheck) -> Bool {
-  match chk { StrOneOf(_) => true, _ => false }
-}
-
 fn has_email(checks :: List[c.StrCheck]) -> Bool {
   list.fold(checks, false, fn (acc :: Bool, chk :: c.StrCheck) -> Bool {
-    acc or is_email(chk)
+    acc or match chk { StrEmail => true, _ => false }
   })
 }
 
 fn has_url(checks :: List[c.StrCheck]) -> Bool {
   list.fold(checks, false, fn (acc :: Bool, chk :: c.StrCheck) -> Bool {
-    acc or is_url(chk)
+    acc or match chk { StrUrl => true, _ => false }
   })
 }
 
 fn has_uuid(checks :: List[c.StrCheck]) -> Bool {
   list.fold(checks, false, fn (acc :: Bool, chk :: c.StrCheck) -> Bool {
-    acc or is_uuid(chk)
+    acc or match chk { StrUuid => true, _ => false }
   })
 }
 
 fn has_one_of(checks :: List[c.StrCheck]) -> Bool {
   list.fold(checks, false, fn (acc :: Bool, chk :: c.StrCheck) -> Bool {
-    acc or is_one_of(chk)
+    acc or match chk { StrOneOf(_) => true, _ => false }
   })
 }
 

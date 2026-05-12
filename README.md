@@ -169,16 +169,22 @@ doesn't model. lex-pydantic covers the gap with:
 
 Pre-1.0. The surface is small (16 modules, ~3000 lines of pure Lex),
 and stable in the sense that no breaking changes are planned for the
-listed API. Verified against lex-lang `v0.7.1`:
+listed API. Verified against lex-lang `v0.8.0`:
 
 - Every `src/` module type-checks (`lex check`).
 - Every test suite returns `run_all = 0` (~185 cases).
 - Every `examples/` demo runs end-to-end.
 
-CHANGELOG carries the exact `lex --version` used. Sixteen ergonomic
-or correctness issues against lex-lang were filed under the
-`lex-pydantic` label while building; each has a documented workaround
-in source.
+CHANGELOG carries the exact `lex --version` used. Of the sixteen
+ergonomic / correctness issues this library filed against lex-lang
+during v0.1-v0.7, thirteen landed in `lex 0.8.0`; this release
+removes the workarounds for them (`mk_*` record constructors,
+`re_match` regex wrapper, hand-rolled `zip_index`, lifted
+`is_email` / `is_url` / `is_uuid` helpers from the #337 stack-leak
+workaround). Three issues remain open: **#331** (Instant /
+Duration comparison), **#334** (`list.cons`; only `list.reverse`
+shipped), and the freshly-filed **#345** (`List[alias]` in
+polymorphic closure params).
 
 | Module | Purpose | LoC |
 |---|---|---|
@@ -701,38 +707,43 @@ sample on every platform.
 
 ### Issues filed against lex-lang
 
-Sixteen small ergonomic or correctness gaps came up while
-building the library. None block any feature here — each has a
-documented workaround in source — but fixing them upstream would
-simplify code or close edge-case crashes. All are filed under the
-`lex-pydantic` label on
-[`alpibrusl/lex-lang`](https://github.com/alpibrusl/lex-lang):
+Seventeen small ergonomic or correctness gaps came up while
+building the library. **Thirteen landed in lex 0.8.0** (#333, #340,
+#341, #342, #343, and the partial `list.reverse` shipped under
+#333). The other four — three open, one filed as a follow-up to
+the partial #323 fix — are documented below with their current
+workarounds:
 
-| Issue | Topic |
-|---|---|
-| [#319](https://github.com/alpibrusl/lex-lang/issues/319) | Inline type ascription `(expr :: Type)` |
-| [#320](https://github.com/alpibrusl/lex-lang/issues/320) | `option.unwrap_or_else` |
-| [#321](https://github.com/alpibrusl/lex-lang/issues/321) | `list.enumerate` |
-| [#322](https://github.com/alpibrusl/lex-lang/issues/322) | Deep JSON type validation in `json.parse_strict` |
-| [#323](https://github.com/alpibrusl/lex-lang/issues/323) | Type-alias asymmetry (`type X = List[Y]` nominal) |
-| [#324](https://github.com/alpibrusl/lex-lang/issues/324) | `_` as a lambda parameter name |
-| [#325](https://github.com/alpibrusl/lex-lang/issues/325) | Scientific-notation float literals |
-| [#326](https://github.com/alpibrusl/lex-lang/issues/326) | `regex.is_match_str` to skip the compile round-trip |
-| [#328](https://github.com/alpibrusl/lex-lang/issues/328) | Record-alias coercion under nested constructors |
-| [#329](https://github.com/alpibrusl/lex-lang/issues/329) | Negative integer literals in match patterns |
-| [#331](https://github.com/alpibrusl/lex-lang/issues/331) | `Instant` / `Duration` have no comparison surface |
-| [#332](https://github.com/alpibrusl/lex-lang/issues/332) | `Str < Str` type-checks but errors at runtime |
-| [#334](https://github.com/alpibrusl/lex-lang/issues/334) | `list.cons` / `list.reverse` for O(n) builder loops |
-| [#337](https://github.com/alpibrusl/lex-lang/issues/337) | Constructor-pattern fail path leaks scrutinee |
-| [#338](https://github.com/alpibrusl/lex-lang/issues/338) | `list.sort_by[T, K]` for canonicalization |
-| [#339](https://github.com/alpibrusl/lex-lang/issues/339) | Top-level fn shadowing a cross-module param miscompiles |
+| Issue | Status | Topic |
+|---|---|---|
+| [#319](https://github.com/alpibrusl/lex-lang/issues/319) | ✅ 0.8.0 | Inline type ascription `(expr :: Type)` |
+| [#320](https://github.com/alpibrusl/lex-lang/issues/320) | ✅ 0.8.0 | `option.unwrap_or_else` |
+| [#321](https://github.com/alpibrusl/lex-lang/issues/321) | ✅ 0.8.0 | `list.enumerate` |
+| [#322](https://github.com/alpibrusl/lex-lang/issues/322) | ✅ 0.8.0 | Deep JSON type validation in `json.parse_strict` |
+| [#323](https://github.com/alpibrusl/lex-lang/issues/323) | ⚠️ partial | Type-alias asymmetry — simple positions yes, polymorphic closures no (see #345) |
+| [#324](https://github.com/alpibrusl/lex-lang/issues/324) | ✅ 0.8.0 | `_` as a lambda parameter name |
+| [#325](https://github.com/alpibrusl/lex-lang/issues/325) | ✅ 0.8.0 | Scientific-notation float literals |
+| [#326](https://github.com/alpibrusl/lex-lang/issues/326) | ✅ 0.8.0 | `regex.is_match_str` to skip the compile round-trip |
+| [#328](https://github.com/alpibrusl/lex-lang/issues/328) | ✅ 0.8.0 | Record-alias coercion under nested constructors |
+| [#329](https://github.com/alpibrusl/lex-lang/issues/329) | ✅ 0.8.0 | Negative integer literals in match patterns |
+| [#331](https://github.com/alpibrusl/lex-lang/issues/331) | 🟡 open | `Instant` / `Duration` have no comparison surface |
+| [#332](https://github.com/alpibrusl/lex-lang/issues/332) | ✅ 0.8.0 | `Str < Str` type-checks and now also runs |
+| [#334](https://github.com/alpibrusl/lex-lang/issues/334) | ⚠️ partial | `list.reverse` shipped in 0.8.0; `list.cons` still open |
+| [#337](https://github.com/alpibrusl/lex-lang/issues/337) | ✅ 0.8.0 | Constructor-pattern fail path leaks scrutinee |
+| [#338](https://github.com/alpibrusl/lex-lang/issues/338) | ✅ 0.8.0 | `list.sort_by[T, K]` for canonicalization |
+| [#339](https://github.com/alpibrusl/lex-lang/issues/339) | ✅ 0.8.0 | Top-level fn shadowing a cross-module param |
+| [#345](https://github.com/alpibrusl/lex-lang/issues/345) | 🟡 open | Type-alias unfold doesn't reach polymorphic-stdlib closure params (#323 follow-up) |
 
-The most impactful for the library are #322 (would simplify the
-two-trust-model section above), #328 (would remove the
-`mk_*` constructor-helper pattern from `schema_import.lex` and
-`json_value.lex`), and #337 (would remove the
-"lift inner match to a top-level helper" workaround from
-`property.lex` and `fuzz.lex`).
+The remaining workarounds in source:
+
+- `src/datetime.lex` keeps `instant_sort_key` (packs `Instant`
+  into a 14-digit Int via `to_components`) until **#331** lands.
+- All modules spell `List[e.Error]` directly rather than aliasing
+  it; **#345** is the blocker for restoring `type Errors =
+  List[Error]`.
+- The `json_value` parser is still O(n²) on nested arrays/objects
+  because **#334**'s `list.cons` half didn't ship in 0.8.0; the
+  string fast path is already linear.
 
 ## License
 
