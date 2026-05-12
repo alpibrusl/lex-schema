@@ -3,7 +3,19 @@
 A pydantic-style **runtime validation library** for [lex-lang](https://github.com/alpibrusl/lex-lang).
 Written in pure Lex — no Rust shims, no host hooks, no native code. It
 runs on stock `lex run` / `lex check` and uses only the existing
-stdlib (`std.str`, `std.list`, `std.regex`, `std.json`, ...).
+stdlib (`std.str`, `std.list`, `std.regex`, `std.json`, `std.datetime`,
+`std.random`, `std.crypto`, `std.cli`, ...).
+
+## Two paths to validation
+
+Pick the one that fits your call-site shape; both produce the same
+`Result[_, List[Error]]` end-to-end.
+
+### Path A — combinator-driven (smallest surface)
+
+Hand-write the validator as a `combineN` over per-field checks.
+Best when the field set is fixed at compile time and you want
+maximum control over the constructed value.
 
 ```lex
 import "./src/error"       as e
@@ -18,10 +30,10 @@ fn build(em :: Str, un :: Str, ag :: Int) -> User {
   { email: em, username: un, age: ag }
 }
 
-fn parse_user(input :: Str) -> Result[User, e.Errors] {
+fn parse_user(input :: Str) -> Result[User, List[e.Error]] {
   cm.and_then(
     p.from_json(input, ["email", "username", "age"]),
-    fn (raw :: User) -> Result[User, e.Errors] {
+    fn (raw :: User) -> Result[User, List[e.Error]] {
       cm.combine3(
         f.check_str("email",    raw.email,    [StrEmail]),
         f.check_str("username", raw.username, [StrMinLen(3), StrMaxLen(32)]),
@@ -33,68 +45,159 @@ fn parse_user(input :: Str) -> Result[User, e.Errors] {
 }
 ```
 
-```bash
-$ lex run examples/01_user_signup.lex format_demo
-"email: not a valid email address [email]\nusername: must be at least 3 characters [min_len]\nusername: does not match pattern ^[a-zA-Z0-9_]+$ [pattern]\nage: must be >= 13 [min]\npassword: must be at least 8 characters [min_len]\npassword: does not match pattern .*[0-9].* [pattern]"
+### Path B — schema-driven (one source of truth)
 
-$ lex run examples/02_nested.lex format_demo
-"email: not a valid email address [email]\naddress.street: must be at least 1 characters [min_len]\naddress.city: must be at least 1 characters [min_len]\naddress.zip: does not match pattern ^[0-9]{5}$ [pattern]\naddress.country: does not match pattern ^[A-Z]{2}$ [pattern]"
+Describe the schema as a value; runtime validation, JSON Schema
+export, TypeScript stubs, and Python pydantic classes all derive
+from the same `ModelSchema`. Best when the schema doubles as API
+documentation or feeds downstream codegen.
 
-$ lex run examples/03_list_of_items.lex format_demo
-"customer: must be at least 1 characters [min_len]\nitems[0].sku: does not match pattern ^[A-Z]{3}-[0-9]{4}$ [pattern]\nitems[1].quantity: must be > 0 [min]\nitems[1].price_cents: must be >= 0 [min]\nitems[2].sku: does not match pattern ^[A-Z]{3}-[0-9]{4}$ [pattern]\nitems[2].quantity: must be > 0 [min]"
+```lex
+import "./src/error"       as e
+import "./src/constraints" as c
+import "./src/schema"      as s
+import "./src/validator"   as v
+
+fn user_schema() -> s.ModelSchema {
+  {
+    title: "User", description: "",
+    fields: [
+      s.required_str("email",    [StrEmail]),
+      s.required_str("username", [StrMinLen(3), StrMaxLen(32)]),
+      s.required_int("age",      [IntInRange(13, 130)]),
+    ],
+  }
+}
+
+# One Validator value carries everything downstream.
+fn user_validator() -> v.Validator { v.make(user_schema()) }
 ```
 
-## Why a validation library at all?
+The validator bundle exposes:
 
-Lex's type system already catches mismatched shapes at compile time —
-that's the whole pitch. So why need pydantic-style runtime checks?
+```lex
+v.validate_str(user_validator(), body)        # runtime validation
+v.export_typescript(user_validator())         # TS interfaces
+v.export_python(user_validator())             # Pydantic v2 classes
+v.export_json_schema_str(user_validator())    # Draft 2020-12
+v.export_openapi_str(user_validator())        # OpenAPI 3.1 component
+```
 
-Because data crosses trust boundaries. The type system can't tell you
-that a string carrying a JSON body has a 5-digit zip; that an `Int`
-parsed from a request body is between 13 and 130; that a list of
-items isn't empty. These are **runtime invariants** the type system
-deliberately doesn't model. `lex-pydantic` covers the gap:
+### Live output
 
-- **Constraints beyond types.** `StrMinLen`, `IntInRange`, `StrPattern`,
-  `StrEmail`, `ListNonEmpty`, plus an open-ended `validate` for
-  custom predicates.
+```bash
+$ lex run examples/01_user_signup.lex format_demo
+email: not a valid email address [email]
+username: must be at least 3 characters [min_len]
+username: does not match pattern ^[a-zA-Z0-9_]+$ [pattern]
+age: must be >= 13 [min]
+password: must be at least 8 characters [min_len]
+password: does not match pattern .*[0-9].* [pattern]
+
+$ lex run examples/02_nested.lex format_demo
+email: not a valid email address [email]
+address.street: must be at least 1 characters [min_len]
+address.city:   must be at least 1 characters [min_len]
+address.zip:    does not match pattern ^[0-9]{5}$ [pattern]
+address.country: does not match pattern ^[A-Z]{2}$ [pattern]
+
+$ lex run examples/03_list_of_items.lex format_demo
+customer:               must be at least 1 characters [min_len]
+items[0].sku:           does not match pattern ^[A-Z]{3}-[0-9]{4}$ [pattern]
+items[1].quantity:      must be > 0 [min]
+items[1].price_cents:   must be >= 0 [min]
+items[2].sku:           does not match pattern ^[A-Z]{3}-[0-9]{4}$ [pattern]
+items[2].quantity:      must be > 0 [min]
+```
+
+## What it covers
+
+Lex's type system already catches mismatched shapes at compile time
+— that's the whole pitch. So why need pydantic-style runtime checks?
+Because data crosses trust boundaries: HTTP bodies, query strings,
+config files, env vars. The type system can't tell you a string
+carrying a JSON body has a 5-digit zip; that an `Int` parsed from
+a request body is between 13 and 130; that a list of items isn't
+empty. These are **runtime invariants** the type system deliberately
+doesn't model. lex-pydantic covers the gap with:
+
+- **Rich constraint catalog.** `StrMinLen`, `StrMaxLen`, `StrPattern`,
+  `StrEmail`, `StrUrl`, `StrUuid`, `StrOneOf`, `IntInRange`,
+  `FloatFinite`, `ListNonEmpty`, `DateBefore`, `DateInRange`, plus
+  an open-ended `validate` for custom predicates.
 - **Multi-error accumulation.** A bad signup form reports every
-  failing field in one shot, not the first one that trips. Pydantic
-  semantics, applicative implementation.
+  failing field in one shot, not the first one that trips —
+  pydantic semantics, applicative implementation.
 - **Path-aware errors.** A leaf failure deep in a nested record
   surfaces as `address.zip` or `items[3].quantity`, ready to render
   into a form-validation UI.
-- **JSON / TOML / YAML entry points.** Wraps `std.{json,toml,yaml}.parse_strict`
-  to surface the outer parse failure as the same `Errors` shape as
-  the field-level checks — a uniform `Result[T, Errors]` end-to-end.
+- **JSON / TOML / YAML entry points.** Wraps
+  `std.{json,toml,yaml}.parse_strict` so the outer parse failure
+  uses the same `Errors` shape as the field-level checks.
+- **Safe-mode JSON.** A first-class `Json` ADT + recursive-descent
+  parser for untrusted input. JSON type mismatches surface as
+  typed `Errors`, not VM panics.
+- **Coercion.** `str → int / float / bool` for query strings, form
+  bodies, env vars — every value arrives as text but downstream
+  code wants typed fields.
+- **Optional fields + defaults.** Both pydantic patterns
+  (`Optional[T] = None`, `T = "default"`) cleanly handled.
+- **Discriminated unions.** Route a JSON payload to one of N
+  variant-specific validators by a tag field.
+- **Datetime bounds.** ISO 8601 parsing + `DateBefore` / `DateAfter`
+  / `DateInRange` constraints with canonical-form normalization.
+- **Cross-field rules.** `cm.cross_check` for "password and
+  confirm_password must match" — pydantic's `@model_validator`
+  equivalent.
+- **Schema-as-value.** `ModelSchema` describes the field set
+  declaratively; one value drives runtime validation *and*
+  generates JSON Schema 2020-12 / OpenAPI 3.1 / TypeScript
+  interfaces / Pydantic v2 classes.
+- **JSON Schema import.** Read a JSON Schema document and
+  produce a `ModelSchema` — the inverse of the export path.
+- **CLI integration.** Wire `std.cli`'s argv parser through the
+  schema; one call validates flags, options, and positionals.
+- **Property-based testing.** Generate constraint-respecting
+  samples from any schema; assert the round-trip property
+  (every generated sample validates).
+- **Fuzz driver.** 30+ hand-picked malformed inputs verify every
+  validator surfaces `Errors`, never a VM panic.
+- **Webhook idempotency.** SHA-256 content keys + a threaded
+  `Set[Str]` for at-least-once delivery deduplication.
 
 ## Status
 
-Pre-1.0. The surface is small (5 modules, ~700 lines), and stable in
-the sense that no breaking changes are planned for the listed API.
-Verified against lex-lang `v0.7.1`: every `src/` module
-type-checks (`lex check`), every test suite returns `0` failures
-(`lex run tests/test_*.lex run_all`), and every `examples/` demo
-runs end-to-end. CHANGELOG carries the exact `lex --version` used.
+Pre-1.0. The surface is small (16 modules, ~3000 lines of pure Lex),
+and stable in the sense that no breaking changes are planned for the
+listed API. Verified against lex-lang `v0.7.1`:
+
+- Every `src/` module type-checks (`lex check`).
+- Every test suite returns `run_all = 0` (~185 cases).
+- Every `examples/` demo runs end-to-end.
+
+CHANGELOG carries the exact `lex --version` used. Sixteen ergonomic
+or correctness issues against lex-lang were filed under the
+`lex-pydantic` label while building; each has a documented workaround
+in source.
 
 | Module | Purpose | LoC |
 |---|---|---|
-| `src/error.lex`       | `Error` type + path helpers + formatting | ~120 |
-| `src/constraints.lex` | `StrCheck`/`IntCheck`/`FloatCheck`/`ListCheck` ADTs + evaluators | ~220 |
-| `src/field.lex`       | `check_str`/`check_int`/...; optional variants + `with_default` | ~250 |
-| `src/combine.lex`     | `combine2..combine6`, `and_then`, `or_else`, `traverse`, `with_path` | ~180 |
-| `src/parse.lex`       | `from_json` / `from_toml` / `from_yaml` | ~50 |
-| `src/coerce.lex`      | `str → int / float / bool` coercion + Map-based `require_*` / `optional_*` | ~190 |
-| `src/json_value.lex`  | Safe-mode `Json` ADT + parser + path-aware extractors + stringify | ~640 |
-| `src/datetime.lex`    | ISO 8601 datetime + ordered `DateCheck` bounds | ~170 |
-| `src/union.lex`       | Discriminated-union (tagged-union) dispatch | ~80 |
-| `src/schema.lex`      | `ModelSchema` value + schema-driven `validate` + JSON Schema / OpenAPI export | ~310 |
-| `src/cli.lex`         | `std.cli` ↔ `ModelSchema` bridge (`parse_and_validate_argv`) | ~80 |
-| `src/property.lex`    | Schema-driven sample generation + round-trip property check | ~310 |
+| `src/error.lex`         | `Error` type + path helpers + formatting | ~120 |
+| `src/constraints.lex`   | `StrCheck`/`IntCheck`/`FloatCheck`/`ListCheck` ADTs + evaluators | ~220 |
+| `src/field.lex`         | `check_str`/`check_int`/...; optional variants + `with_default` | ~250 |
+| `src/combine.lex`       | `combine2..combine6`, `and_then`, `or_else`, `traverse`, `with_path`, `cross_check` | ~230 |
+| `src/parse.lex`         | `from_json` / `from_toml` / `from_yaml` | ~50 |
+| `src/coerce.lex`        | `str → int / float / bool` coercion + Map-based `require_*` / `optional_*` | ~190 |
+| `src/json_value.lex`    | Safe-mode `Json` ADT + parser + path-aware extractors + stringify | ~640 |
+| `src/datetime.lex`      | ISO 8601 datetime + ordered `DateCheck` bounds | ~170 |
+| `src/union.lex`         | Discriminated-union (tagged-union) dispatch | ~80 |
+| `src/schema.lex`        | `ModelSchema` value + schema-driven `validate` + JSON Schema / OpenAPI export | ~310 |
 | `src/schema_import.lex` | JSON Schema → `ModelSchema` (inverse of `to_json_schema`) | ~220 |
-| `src/sdk.lex`         | `ModelSchema` → TypeScript / Python codegen for client SDKs | ~340 |
-| `src/validator.lex`   | `Validator` bundle (schema + pre-computed exports + validate) | ~70 |
-| `src/fuzz.lex`        | Malformed-input fuzz driver — every category surfaces as `Err` | ~140 |
+| `src/cli.lex`           | `std.cli` ↔ `ModelSchema` bridge (`parse_and_validate_argv`) | ~80 |
+| `src/sdk.lex`           | `ModelSchema` → TypeScript / Python codegen for client SDKs | ~340 |
+| `src/property.lex`      | Schema-driven sample generation + round-trip property check | ~310 |
+| `src/validator.lex`     | `Validator` bundle (schema + pre-computed exports + validate) | ~70 |
+| `src/fuzz.lex`          | Malformed-input fuzz driver — every category surfaces as `Err` | ~140 |
 
 ## Install
 
@@ -107,26 +210,26 @@ import "./lex-pydantic/src/constraints" as c
 import "./lex-pydantic/src/field"       as f
 import "./lex-pydantic/src/combine"     as cm
 import "./lex-pydantic/src/parse"       as p
+# … plus json_value / schema / validator / etc. as needed.
 ```
 
-Each module is a separate import because Lex resolves
-module names file-by-file; the import is a few lines, no bundler.
+Each module is a separate import because Lex resolves module names
+file-by-file; the import is a few lines, no bundler.
 
 ## API at a glance
 
 ### Errors
 
 ```lex
-type Error  = { path :: Str, code :: Str, message :: Str }
-type Errors = List[Error]
+type Error = { path :: Str, code :: Str, message :: Str }
 
 # Construction
 e.error(path, code, message)   -> Error
-e.single(path, code, message)  -> Errors        # one-item list
+e.single(path, code, message)  -> List[Error]   # one-item list
 
 # Composition
-e.concat(a, b)        -> Errors
-e.flatten([a, b, ...]) -> Errors
+e.concat(a, b)         -> List[Error]
+e.flatten([a, b, ...]) -> List[Error]
 
 # Path manipulation
 e.prefix_path("address", inner)   # leaf "zip"   -> "address.zip"
@@ -139,8 +242,8 @@ e.format(errs)         # "path: message [code]\n..."
 ### Constraints
 
 Each check is a *value* (a variant), not a closure — so you can
-inspect, store, and audit them, e.g.
-`lex audit --calls StrPattern` lists every regex check in a tree.
+inspect, store, and audit them, e.g. `lex audit --calls StrPattern`
+lists every regex check in a tree.
 
 ```lex
 type StrCheck =
@@ -160,12 +263,19 @@ type FloatCheck =
 
 type ListCheck =
     ListMinLen(Int) | ListMaxLen(Int) | ListExactLen(Int) | ListNonEmpty
+
+# Plus `datetime.DateCheck` for ISO 8601 bounds:
+type DateCheck =
+    DateBefore(Str) | DateAfter(Str)
+  | DateAtOrBefore(Str) | DateAtOrAfter(Str)
+  | DateInRange(Str, Str)
 ```
 
 ### Field validators
 
-Every validator returns `Result[T, Errors]` and *accumulates* every
-failing constraint for that field — never short-circuits at the first.
+Every validator returns `Result[T, List[Error]]` and *accumulates*
+every failing constraint for that field — never short-circuits at
+the first.
 
 ```lex
 f.check_str(path, value, [StrEmail, StrMaxLen(254)])
@@ -194,53 +304,22 @@ For query strings, form posts, env vars — every value arrives as a
 constraint catalog.
 
 ```lex
-coerce.coerce_str_to_int(path, "42")          -> Result[Int, Errors]
-coerce.coerce_str_to_float(path, "3.14")      -> Result[Float, Errors]
-coerce.coerce_str_to_bool(path, "yes")        -> Result[Bool, Errors]
+coerce.coerce_str_to_int(path, "42")          -> Result[Int,   List[Error]]
+coerce.coerce_str_to_float(path, "3.14")      -> Result[Float, List[Error]]
+coerce.coerce_str_to_bool(path, "yes")        -> Result[Bool,  List[Error]]
 
 # Coerce + validate in one step.
 coerce.check_str_as_int(path, s, [IntPositive])
 coerce.check_str_as_float(path, s, [FloatNonNegative])
 
-# Pull a value out of a Map[Str, Str] (query strings, form bodies)
-# with presence + type + constraint check in one call.
+# Pull a value out of a Map[Str, Str] (query strings, form bodies).
 coerce.require_int_from_map(qs, "page", [IntPositive])
 coerce.require_bool_from_map(qs, "debug")
 coerce.optional_str_from_map(qs, "query", [StrMaxLen(120)])
 ```
 
 Truthy bool words: `true`, `1`, `yes`, `on`, `y`, `t`. Falsy:
-`false`, `0`, `no`, `off`, `n`, `f`. Case-insensitive,
-whitespace-trimmed.
-
-### Safe-mode JSON (`json_value`)
-
-For untrusted inputs where the JSON↔Lex type guarantees of the
-polymorphic `from_json` path aren't acceptable. The library parses
-into a `Json` ADT (`JNull | JBool(Bool) | JInt(Int) | JFloat(Float)
-| JStr(Str) | JList(...) | JObj(...)`) and every extractor is total:
-a JSON `"thirty"` against an expected `Int` field is a `type` error,
-not a VM crash.
-
-```lex
-import "../src/json_value" as jv
-
-# Parse: O(n^2) slice-based recursive descent, returns Json.
-jv.parse(body) -> Result[Json, ParseErr]
-jv.parse_into_errors(body) -> Result[Json, Errors]   # outer-shell
-
-# Field extractors — same constraint catalog, total over input.
-jv.j_str(prefix, json, "email", [StrEmail])
-jv.j_int(prefix, json, "age",   [IntInRange(13, 130)])
-jv.j_optional_str(prefix, json, "nickname", [StrMaxLen(40)])
-jv.j_obj(prefix, json, "address")   # nested record
-jv.j_list(prefix, json, "items")    # list of Json
-```
-
-Use safe-mode when JSON-type mismatches are part of your threat
-model. Use the regular `from_json` + `check_*` path when the
-producer is trusted and you want the lighter weight. Both produce
-the same `Errors` shape so callers can swap freely.
+`false`, `0`, `no`, `off`, `n`, `f`. Case-insensitive, trimmed.
 
 ### Combinators
 
@@ -264,6 +343,10 @@ cm.traverse(xs, f)
 # Prefix every error's path. Used at nested-record boundaries.
 cm.with_path("address", inner_result)
 
+# Cross-field rules — run after a successful combineN via and_then.
+cm.cross_check(value, [rule1, rule2, ...])   # rule :: T -> Option[List[Error]]
+cm.require(value, predicate, path, code, message)  # one-shot
+
 # Lift / fail helpers
 cm.pure(v)     # Ok(v)
 cm.fail(es)    # Err(es)
@@ -273,15 +356,184 @@ cm.fail(es)    # Err(es)
 
 ```lex
 # Parse JSON, then validate. Strict mode checks listed top-level fields.
-p.from_json(source, ["email", "age"])   -> Result[T, Errors]
-p.from_toml(source, ["license"])        -> Result[T, Errors]
-p.from_yaml(source, ["name"])           -> Result[T, Errors]
+p.from_json(source, ["email", "age"])   -> Result[T, List[Error]]
+p.from_toml(source, ["license"])        -> Result[T, List[Error]]
+p.from_yaml(source, ["name"])           -> Result[T, List[Error]]
 ```
+
+### Safe-mode JSON (`json_value`)
+
+For untrusted inputs where the JSON↔Lex type guarantees of the
+polymorphic `from_json` path aren't acceptable. The library parses
+into a `Json` ADT (`JNull | JBool(Bool) | JInt(Int) | JFloat(Float)
+| JStr(Str) | JList(...) | JObj(...)`) and every extractor is
+total: a JSON `"thirty"` against an expected `Int` field is a
+`type` error, not a VM crash.
+
+```lex
+# Parse: O(n) for escape-free strings, O(n²) worst-case for nested
+# arrays / objects (blocked on lex-lang#334).
+jv.parse(body)                              -> Result[Json, ParseErr]
+jv.parse_into_errors(body)                  -> Result[Json, List[Error]]
+
+# Field extractors — same constraint catalog, total over input.
+jv.j_str(prefix, json, "email", [StrEmail])
+jv.j_int(prefix, json, "age",   [IntInRange(13, 130)])
+jv.j_optional_str(prefix, json, "nickname", [StrMaxLen(40)])
+jv.j_obj(prefix, json, "address")             # nested record
+jv.j_list(prefix, json, "items")              # list of Json
+
+# Dotted-path navigation — no intermediate with_path needed.
+jv.get_path(json, "user.address.zip")         -> Option[Json]
+jv.j_str_at(json, "user.email", [StrEmail])
+
+# Round-trip-able serializer.
+jv.stringify(json)         # compact
+jv.stringify_pretty(json)  # 2-space indent
+```
+
+### Discriminated unions (`union`)
+
+Route a JSON payload to one of N variant-specific validators based
+on a tag field. Three failure modes each tag with their own code:
+missing tag → `missing`, wrong type → `type`, unknown discriminator
+→ `one_of` (message lists the known set).
+
+```lex
+type WebhookEvent =
+    Signup({ user_id :: Str, email :: Str })
+  | Purchase({ user_id :: Str, cents :: Int })
+
+fn validate_event(j :: jv.Json) -> Result[WebhookEvent, List[Error]] {
+  u.discriminate("", j, "event", [
+    ("signup",   validate_signup),
+    ("purchase", validate_purchase),
+  ])
+}
+```
+
+### Datetime (`datetime`)
+
+ISO 8601 parsing + ordered bound checks. The validator returns the
+canonical UTC string so downstream code stores a uniformly ordered
+form. Comparisons go through a packed `YYYYMMDDhhmmss` `Int` key
+(workaround for lex-lang#331 + #332).
+
+```lex
+dt.check_iso_datetime("ts", s, [
+  DateAfter("2026-01-01T00:00:00Z"),
+  DateAtOrBefore("2026-12-31T23:59:59Z"),
+])
+dt.check_iso_in_past("created_at", s)     # [time]-flavored preset
+dt.check_iso_in_future("expires_at", s)
+```
+
+### Schemas as values (`schema`)
+
+A `ModelSchema` is a `List[Field]`, each `Field` carries a
+`FieldKind` ADT (`KStr` / `KInt` / `KFloat` / `KBool` / `KArray` /
+`KObject`) with constraint lists inline. Three operations off one
+schema:
+
+```lex
+# Run-time validation, returns normalized Json.
+s.validate(schema, json) -> Result[Json, List[Error]]
+
+# Emit JSON Schema 2020-12 (full doc with $schema URI).
+s.to_json_schema(schema) -> Json
+
+# Emit OpenAPI 3.1 component schema (no $schema, with title).
+s.to_openapi_schema(schema) -> Json
+
+# Builders that pin the nominal type (workaround for lex-lang#328).
+s.required_str(name, checks) | s.required_int / float / bool / array / object
+s.optional(field)                       # flip required → false
+s.with_desc(field, "human-readable")    # add description
+```
+
+Round-trip import:
+
+```lex
+si.from_str(json_schema_text)  -> Result[ModelSchema, List[Error]]
+si.from_json_schema(jv_value)  -> Result[ModelSchema, List[Error]]
+```
+
+### Validator bundle (`validator`)
+
+`make(schema)` runs every emitter once and stores results in a
+single record. Pass the `Validator` around for both runtime
+validation and codegen.
+
+```lex
+let val := v.make(user_schema())
+
+v.validate(val, payload_json)        -> Result[Json, List[Error]]
+v.validate_str(val, payload_str)     -> Result[Json, List[Error]]
+v.export_json_schema_str(val)        -> Str
+v.export_openapi_str(val)            -> Str
+v.export_typescript(val)             -> Str
+v.export_python(val)                 -> Str
+v.summary(val)                       -> Str   # "Validator{title=..., fields=N}"
+```
+
+### SDK codegen (`sdk`)
+
+```lex
+sdk.to_typescript(schema)    # export interface User { ... }
+sdk.to_python(schema)        # class User(BaseModel): ...
+```
+
+`StrOneOf` renders as `"a" | "b"` (TS) / `Literal["a", "b"]` (Py).
+Nested records emit their own interface/class. Optional fields use
+`?:` / `Optional[T]`. Constraint catalog maps to JSDoc hints (TS)
+and pydantic field args (Py).
+
+### CLI integration (`cli`)
+
+```lex
+cl.parse_and_validate_argv(spec, argv, schema)
+  -> Result[Json, List[Error]]
+
+cl.help(spec)                                   # human-readable
+cl.describe(spec)                               # machine-readable JSON
+```
+
+Three error sources tag distinctly: `cli.parse` failure (code
+`parse`), bridge decode (`parse`), constraint failure (per-rule).
+
+### Property-based testing (`property`)
+
+```lex
+# Pure + deterministic via std.random's SplitMix64.
+p.generate(schema, rng)              -> (Json, Rng)
+
+# n round-trip cycles. Ok(n) on a clean sweep.
+p.round_trip(schema, n, seed)        -> Result[Int, List[Error]]
+```
+
+Constraint-respecting generators for str (length, format, OneOf),
+int (range, OneOf), float (range), bool, list (length, element-
+kind), and nested objects.
+
+### Fuzz driver (`fuzz`)
+
+```lex
+fz.run_all(schema)              -> List[Tally]
+fz.count_escapes(schema)        -> Int             # 0 = every input errored
+fz.format_tallies(tallies)      -> Str
+```
+
+Five hand-picked catalogues (parse failures, type mismatches,
+missing required, constraint failures, deep nesting) run against
+the schema. The pass condition is `count_escapes == 0` *and* no VM
+panic — the latter enforced by the run completing.
 
 ## Examples
 
 All examples in `examples/` are runnable end-to-end via
-`lex run <file> <fn> [args]`.
+`lex run <file> <fn> [args]`. Some require effect grants
+(`--allow-effects net,io,time`); each example's header carries the
+exact invocation.
 
 | File | Demonstrates |
 |---|---|
@@ -297,7 +549,7 @@ All examples in `examples/` are runnable end-to-end via
 | `10_schema_introspection.lex`  | `ModelSchema` value + run-time validation + JSON Schema / OpenAPI export |
 | `11_cli_args.lex`              | `std.cli` argv → ModelSchema validation in one call |
 | `12_cross_field.lex`           | Cross-field rules: password match, date ordering |
-| `13_property_test.lex`         | Generate random samples from a schema, assert the round-trip property |
+| `13_property_test.lex`         | 200 generate→validate cycles against a User schema; all pass |
 | `14_json_schema_round_trip.lex` | Emit JSON Schema, parse it back, validate the same payload through both |
 | `15_sdk_export.lex`            | Generate TypeScript interfaces + Pydantic v2 classes from one schema |
 | `16_validation_service.lex`    | HTTP `/v1/validate` service accepting `{schema, payload}` over the wire |
@@ -311,42 +563,68 @@ Run the bad-input demos to see the full error trail:
 $ lex run examples/01_user_signup.lex format_demo
 $ lex run examples/02_nested.lex      format_demo
 $ lex run examples/03_list_of_items.lex format_demo
+$ lex run examples/08_discriminated_union.lex format_bad_field
+$ lex run examples/19_fuzz_driver.lex demo_tallies   # "parse_failures: 12/12 ..."
+```
+
+Generate an SDK off one schema:
+
+```bash
+$ lex run examples/15_sdk_export.lex demo_typescript
+$ lex run examples/15_sdk_export.lex demo_python
+$ lex run examples/15_sdk_export.lex demo_json_schema
 ```
 
 ## Tests
 
+17 suites, ~185 cases. The full sweep:
+
 ```bash
-lex run tests/test_error.lex       run_all   # 0 ⇒ all pass
-lex run tests/test_constraints.lex run_all
-lex run tests/test_field.lex       run_all
-lex run tests/test_combine.lex     run_all
-lex run tests/test_coerce.lex      run_all
-lex run tests/test_json_value.lex  run_all
-lex run tests/test_json_extra.lex  run_all   # path + stringify
-lex run tests/test_union.lex       run_all
-lex run tests/test_datetime.lex    run_all
-lex run tests/test_schema.lex      run_all
-lex run tests/test_cli.lex         run_all
-lex run tests/test_cross_field.lex run_all
-lex run tests/test_property.lex    run_all
-lex run tests/test_schema_import.lex run_all
-lex run tests/test_sdk.lex          run_all
-lex run tests/test_validator.lex    run_all
-lex run tests/test_fuzz.lex         run_all
+for f in tests/test_*.lex; do
+  echo -n "$(basename $f): "
+  lex run --allow-effects time "$f" run_all
+done
 ```
 
-The suite covers ~185 cases across the sixteen modules — every
-constraint's pass/fail branches, error accumulation in `combineN`,
-path manipulation, coercion, the Json ADT parser + extractors +
-round-trip, discriminated-union dispatch, and ISO 8601 bounds.
+Reference output: every line ends in `0` (zero failures).
+
+Each module has its own suite:
+
+```bash
+lex run tests/test_error.lex         run_all   # ~11 cases
+lex run tests/test_constraints.lex   run_all   # ~21 cases
+lex run tests/test_field.lex         run_all   # ~8  cases
+lex run tests/test_combine.lex       run_all   # ~11 cases
+lex run tests/test_coerce.lex        run_all   # ~12 cases
+lex run tests/test_json_value.lex    run_all   # ~23 cases
+lex run tests/test_json_extra.lex    run_all   # ~12 cases
+lex run tests/test_union.lex         run_all   # ~6  cases
+lex run tests/test_datetime.lex      run_all   # ~13 cases
+lex run tests/test_schema.lex        run_all   # ~13 cases
+lex run tests/test_cli.lex           run_all   # ~6  cases
+lex run tests/test_cross_field.lex   run_all   # ~7  cases
+lex run tests/test_property.lex      run_all   # ~8  cases
+lex run tests/test_schema_import.lex run_all   # ~7  cases
+lex run tests/test_sdk.lex           run_all   # ~12 cases
+lex run tests/test_validator.lex     run_all   # ~9  cases
+lex run tests/test_fuzz.lex          run_all   # ~4  cases
+```
+
+Coverage spans every constraint's pass/fail branches, error
+accumulation in `combineN`, path manipulation, coercion,
+the Json ADT parser + extractors + round-trip, discriminated-union
+dispatch, ISO 8601 bounds, schema-driven validation + JSON Schema /
+OpenAPI emission, SDK codegen for TS + Python, the validator
+bundle, property-based round-trip on randomly-generated samples,
+and the fuzz driver's malformed-input catalogues.
 
 ## Design notes
 
 ### Why constraints are variants, not closures
 
-In a closure-based design (pydantic-py: `Field(min_length=1)`), each
-constraint is an opaque callable. We instead model them as ADT
-variants:
+In a closure-based design (pydantic-py: `Field(min_length=1)`),
+each constraint is an opaque callable. We instead model them as
+ADT variants:
 
 ```lex
 type StrCheck = StrMinLen(Int) | StrMaxLen(Int) | ...
@@ -354,99 +632,107 @@ type StrCheck = StrMinLen(Int) | StrMaxLen(Int) | ...
 
 Three concrete payoffs:
 
-1. **Inspectable by `lex audit`.** `lex audit --calls StrPattern` lists
-   every regex constraint in a tree. Closures vanish into call-site bodies.
-2. **No closure-in-record surprises.** Lex's closures-in-records
-   support landed late (#169); ADTs are first-class from day one.
+1. **Inspectable by `lex audit`.** `lex audit --calls StrPattern`
+   lists every regex constraint in a tree. Closures vanish into
+   call-site bodies.
+2. **Codegen-friendly.** `sdk.to_typescript`, `to_python`, and
+   `s.to_json_schema` all walk the constraint list and emit
+   appropriate annotations / Field-args / JSON Schema keywords.
+   A closure-based design would lose this for free.
 3. **Cheaper.** A variant is a tagged record; a closure carries
    captures + an indirect call.
 
-The trade-off is the fixed catalog. To add a new constraint kind, add
-a variant + a branch in `eval_xxx`. The library leans into "the small
-total surface" rule from the Lex design rules — better four well-named
-checks than a thousand one-off lambdas.
+The trade-off is the fixed catalog. To add a new constraint kind,
+add a variant + a branch in `eval_xxx` + a branch in each codegen
+emitter. The library leans into "the small total surface" rule
+from the Lex design rules — better four well-named checks than
+a thousand one-off lambdas.
 
-For genuinely custom predicates the `f.validate(path, value, code,
-predicate)` escape hatch takes a closure directly.
+For genuinely custom predicates the `f.validate(path, value,
+code, predicate)` escape hatch takes a closure directly, and
+`cm.cross_check` takes a list of closures for model-level rules.
 
 ### Why applicative, not monadic, for sibling fields
 
 Sibling fields should report failures *all at once*. Monadic
 short-circuit (`Result.and_then`) hides the second field's errors
 behind the first's. We use applicative `combine2..combine6` so a
-form with three bad fields surfaces three errors, not one-then-fix-
-then-rerun-three-times.
+form with three bad fields surfaces three errors, not
+one-then-fix-then-rerun-three-times.
 
 When one field's *type* depends on another's value (i.e., a real
 dependency), use `cm.and_then` to chain. That's the rare case;
 sibling validation is the common one.
 
-### The trust model around `from_json`
+### Two trust models around JSON
 
 `p.from_json` wraps `std.json.parse_strict`. The standard library
-parser does field-presence checks (#168), but it doesn't yet do deep
-type validation: a JSON `{"age": "thirty"}` parsed against a Lex
-record `{age :: Int}` returns a record with a `Value::Str` in the
-`age` slot, which crashes the first time downstream code does
-arithmetic on it.
+parser does field-presence checks (#168), but it doesn't yet do
+deep type validation: a JSON `{"age": "thirty"}` parsed against a
+Lex record `{age :: Int}` returns a record with a `Value::Str` in
+the `age` slot, which crashes the first time downstream code does
+arithmetic on it. The acceptance test for the full fix is tracked
+at [lex-lang#322](https://github.com/alpibrusl/lex-lang/issues/322);
+when it lands, `p.from_json` becomes fully runtime-safe end-to-end
+with no surface change.
 
-The library treats this as a `std.json` concern. The acceptance test
-for the future fix is tracked at
-[lex-lang#168](https://github.com/alpibrusl/lex-lang/issues/168);
-when it lands, `lex-pydantic` becomes fully runtime-safe end-to-end
-with no changes to its surface. For now, well-typed JSON producers
-(other Lex services, statically-typed clients) are safe; arbitrary
-internet input has the same caveat lex itself has today.
+For now, two paths cover both threat models:
+
+- **Trusted-producer mode** — `p.from_json` + field validators.
+  Lightweight; relies on the JSON producer (another Lex service,
+  a typed client, your own code) emitting types that match the
+  declared Lex record.
+- **Safe mode** — `jv.parse` + `jv.j_str` / `jv.j_int` extractors.
+  Fully total over input. The parser is O(n) for escape-free
+  strings and O(n²) worst-case for nested arrays / objects
+  (the latter blocked on [lex-lang#334](https://github.com/alpibrusl/lex-lang/issues/334)).
+
+Both produce the same `Errors` shape; callers swap freely as the
+trust model changes.
+
+### Pure + deterministic by construction
+
+Every `src/*.lex` module type-checks under `lex check` with no
+effects required. `datetime.check_iso_in_past` / `_in_future`
+carry `[time]` because they read the wall clock; everything else
+is pure. Property-based test generation is deterministic via
+`std.random`'s SplitMix64 — the same seed produces the same
+sample on every platform.
 
 ### Issues filed against lex-lang
 
-While building this library, a handful of small ergonomic gaps in
-Lex came up. None block any feature here — the library works
-around each one — but fixing them upstream would simplify code.
-All are filed under the `lex-pydantic` label on
+Sixteen small ergonomic or correctness gaps came up while
+building the library. None block any feature here — each has a
+documented workaround in source — but fixing them upstream would
+simplify code or close edge-case crashes. All are filed under the
+`lex-pydantic` label on
 [`alpibrusl/lex-lang`](https://github.com/alpibrusl/lex-lang):
 
-- [#319](https://github.com/alpibrusl/lex-lang/issues/319) — inline
-  type ascription `(expr :: Type)`
-- [#320](https://github.com/alpibrusl/lex-lang/issues/320) —
-  `option.unwrap_or_else`
-- [#321](https://github.com/alpibrusl/lex-lang/issues/321) —
-  `list.enumerate`
-- [#322](https://github.com/alpibrusl/lex-lang/issues/322) — deep
-  JSON type validation under `json.parse_strict`
-- [#323](https://github.com/alpibrusl/lex-lang/issues/323) —
-  type aliases for `List[Y]` should unfold transparently like
-  Record aliases do
-- [#324](https://github.com/alpibrusl/lex-lang/issues/324) —
-  `_` as a lambda parameter name
-- [#325](https://github.com/alpibrusl/lex-lang/issues/325) —
-  scientific-notation float literals (`1.79e308`)
-- [#326](https://github.com/alpibrusl/lex-lang/issues/326) —
-  `regex.is_match_str` to skip the compile round-trip
-- [#328](https://github.com/alpibrusl/lex-lang/issues/328) —
-  record-alias coercion stops working under nested constructors
-  (`Result[T, MyErrAlias]`)
-- [#329](https://github.com/alpibrusl/lex-lang/issues/329) —
-  negative integer literals in match patterns (`Ok(-1)`)
-- [#331](https://github.com/alpibrusl/lex-lang/issues/331) —
-  `Instant` / `Duration` have no comparison or scalar-conversion
-  surface
-- [#332](https://github.com/alpibrusl/lex-lang/issues/332) —
-  `Str < Str` type-checks but errors at runtime (NumLt is
-  Int/Float-only)
-- [#334](https://github.com/alpibrusl/lex-lang/issues/334) —
-  `list.cons` / `list.reverse` for O(n) builder loops (the
-  reason `json_value.lex`'s parser is O(n²) in the worst case)
-- [#337](https://github.com/alpibrusl/lex-lang/issues/337) —
-  constructor-pattern fail path leaks the scrutinee onto the
-  stack; the symptom is an "expected Bool, got Variant{...}"
-  panic far from the source when a `match` is mixed with `or`
-- [#338](https://github.com/alpibrusl/lex-lang/issues/338) —
-  `list.sort_by[T, K]` for canonicalization / dedup pipelines
-- [#339](https://github.com/alpibrusl/lex-lang/issues/339) —
-  top-level fn whose name shadows a cross-module parameter is
-  passed as a closure value (silent miscompile, panic far from
-  the source)
+| Issue | Topic |
+|---|---|
+| [#319](https://github.com/alpibrusl/lex-lang/issues/319) | Inline type ascription `(expr :: Type)` |
+| [#320](https://github.com/alpibrusl/lex-lang/issues/320) | `option.unwrap_or_else` |
+| [#321](https://github.com/alpibrusl/lex-lang/issues/321) | `list.enumerate` |
+| [#322](https://github.com/alpibrusl/lex-lang/issues/322) | Deep JSON type validation in `json.parse_strict` |
+| [#323](https://github.com/alpibrusl/lex-lang/issues/323) | Type-alias asymmetry (`type X = List[Y]` nominal) |
+| [#324](https://github.com/alpibrusl/lex-lang/issues/324) | `_` as a lambda parameter name |
+| [#325](https://github.com/alpibrusl/lex-lang/issues/325) | Scientific-notation float literals |
+| [#326](https://github.com/alpibrusl/lex-lang/issues/326) | `regex.is_match_str` to skip the compile round-trip |
+| [#328](https://github.com/alpibrusl/lex-lang/issues/328) | Record-alias coercion under nested constructors |
+| [#329](https://github.com/alpibrusl/lex-lang/issues/329) | Negative integer literals in match patterns |
+| [#331](https://github.com/alpibrusl/lex-lang/issues/331) | `Instant` / `Duration` have no comparison surface |
+| [#332](https://github.com/alpibrusl/lex-lang/issues/332) | `Str < Str` type-checks but errors at runtime |
+| [#334](https://github.com/alpibrusl/lex-lang/issues/334) | `list.cons` / `list.reverse` for O(n) builder loops |
+| [#337](https://github.com/alpibrusl/lex-lang/issues/337) | Constructor-pattern fail path leaks scrutinee |
+| [#338](https://github.com/alpibrusl/lex-lang/issues/338) | `list.sort_by[T, K]` for canonicalization |
+| [#339](https://github.com/alpibrusl/lex-lang/issues/339) | Top-level fn shadowing a cross-module param miscompiles |
+
+The most impactful for the library are #322 (would simplify the
+two-trust-model section above), #328 (would remove the
+`mk_*` constructor-helper pattern from `schema_import.lex` and
+`json_value.lex`), and #337 (would remove the
+"lift inner match to a top-level helper" workaround from
+`property.lex` and `fuzz.lex`).
 
 ## License
 
