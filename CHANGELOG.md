@@ -2,6 +2,56 @@
 
 All notable changes to lex-pydantic are tracked here.
 
+## [Unreleased] — 0.3.0
+
+### Added
+
+- `src/union.lex` — `discriminate(prefix, j, tag_field, branches)`
+  for tagged-union JSON payloads. Branches are
+  `(Str, (Json) -> Result[T, Errors])` pairs; missing/wrong/unknown
+  tag failures each get a distinct error code.
+- `src/datetime.lex` — `DateCheck` variants
+  (`DateBefore` / `DateAfter` / `DateAtOrBefore` / `DateAtOrAfter`
+  / `DateInRange`) plus `check_iso_datetime` /
+  `check_datetime(format)`. Comparisons go through a packed
+  `YYYYMMDDhhmmss` `Int` key derived from `datetime.to_components`
+  — a workaround for lex-lang#331 (no `Instant` comparison) and
+  lex-lang#332 (no runtime `Str < Str`). Now-relative presets
+  (`check_iso_in_past` / `check_iso_in_future`) carry `[time]`.
+- `src/json_value.lex` — dotted-path extraction (`get_path`,
+  `j_str_at`, `j_int_at`, `j_optional_str_at`), `stringify`
+  (compact, round-trips through `parse`), and `stringify_pretty`
+  (two-space indented).
+- `examples/08_discriminated_union.lex` — webhook event router
+  with three event variants.
+- `examples/09_datetime_and_paths.lex` — scheduled-event payload
+  combining ISO 8601 bounds and dotted paths through nested
+  records (`organizer.email`, `location.address.city`).
+- `tests/test_union.lex` — 6 cases (happy path, missing tag,
+  unknown tag, branch error propagation).
+- `tests/test_datetime.lex` — 13 cases covering parse, bounds,
+  accumulation, and canonical-form return.
+- `tests/test_json_extra.lex` — 12 cases for `get_path`,
+  `j_str_at`, `j_optional_str_at`, and stringify (primitives,
+  round-trip, escapes, pretty form).
+
+### Issues filed
+
+- [`#331`](https://github.com/alpibrusl/lex-lang/issues/331)
+  `Instant`/`Duration` have no comparison surface. Worked around
+  in `src/datetime.lex` by packing to a 14-digit `YYYYMMDDhhmmss`
+  Int via `to_components`.
+- [`#332`](https://github.com/alpibrusl/lex-lang/issues/332)
+  `Str < Str` type-checks but the VM's `NumLt` only handles
+  `Int`/`Float`. Worked around with the same Int packing as #331.
+
+### Verified against
+
+- `lex 0.7.1` (HEAD of `main`).
+- 9 of 9 test suites: 0 failures.
+- 9 of 9 examples run end-to-end.
+- Every `src/*.lex` module `lex check`s cleanly.
+
 ## [Unreleased] — 0.2.0
 
 ### Added

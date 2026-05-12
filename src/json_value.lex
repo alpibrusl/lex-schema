@@ -610,3 +610,181 @@ fn join_path(prefix :: Str, leaf :: Str) -> Str {
   if str.is_empty(prefix) { leaf }
   else { str.concat(prefix, str.concat(".", leaf)) }
 }
+
+# ============================================================
+# Dotted-path navigation
+# ============================================================
+#
+# `get_path(j, "user.address.zip")` walks dotted segments. Each
+# segment must resolve through `get_field` (so the intermediate
+# nodes are objects); on any mismatch the result is `None`.
+#
+# This is a read-only mirror of pydantic's nested field access; it
+# doesn't decode types — only navigates. Pair with `as_str` /
+# `as_int` to extract a typed leaf.
+
+fn get_path(j :: Json, path :: Str) -> Option[Json] {
+  let segments := str.split(path, ".")
+  list.fold(segments, Some(j), fn (acc :: Option[Json], seg :: Str) -> Option[Json] {
+    match acc {
+      None    => None,
+      Some(j_inner) => get_field(j_inner, seg),
+    }
+  })
+}
+
+# Error-emitting variants — same shape as `j_str` / `j_int` but the
+# field argument is a dotted path. The path appears verbatim in the
+# error so a missing leaf surfaces as `user.address.zip: ...`.
+
+fn j_str_at(
+  j :: Json,
+  path :: Str,
+  checks :: List[c.StrCheck]
+) -> Result[Str, List[e.Error]] {
+  match get_path(j, path) {
+    None    => Err(e.single(path, e.code_missing(), "field is required")),
+    Some(v) => match as_str(v) {
+      Some(s) => f.check_str(path, s, checks),
+      None    => Err(e.single(path, e.code_type(),
+        str.concat("expected string, got ", type_name(v)))),
+    },
+  }
+}
+
+fn j_int_at(
+  j :: Json,
+  path :: Str,
+  checks :: List[c.IntCheck]
+) -> Result[Int, List[e.Error]] {
+  match get_path(j, path) {
+    None    => Err(e.single(path, e.code_missing(), "field is required")),
+    Some(v) => match as_int(v) {
+      Some(n) => f.check_int(path, n, checks),
+      None    => Err(e.single(path, e.code_type(),
+        str.concat("expected integer, got ", type_name(v)))),
+    },
+  }
+}
+
+fn j_optional_str_at(
+  j :: Json,
+  path :: Str,
+  checks :: List[c.StrCheck]
+) -> Result[Option[Str], List[e.Error]] {
+  match get_path(j, path) {
+    None    => Ok(None),
+    Some(v) => if is_null(v) {
+      Ok(None)
+    } else {
+      match as_str(v) {
+        Some(s) => match f.check_str(path, s, checks) {
+          Ok(s2)  => Ok(Some(s2)),
+          Err(es) => Err(es),
+        },
+        None    => Err(e.single(path, e.code_type(),
+          str.concat("expected string or null, got ", type_name(v)))),
+      }
+    },
+  }
+}
+
+# ============================================================
+# Stringify (Json → Str)
+# ============================================================
+#
+# Inverse of `parse`. Useful for tests (round-tripping), debug
+# logging, and re-serializing after a validated transformation.
+# Output is compact (no whitespace); use `stringify_pretty` for
+# indented output.
+
+fn stringify(j :: Json) -> Str {
+  match j {
+    JNull     => "null",
+    JBool(b)  => if b { "true" } else { "false" },
+    JInt(n)   => int.to_str(n),
+    JFloat(x) => float.to_str(x),
+    JStr(s)   => str.concat("\"", str.concat(escape_str(s), "\"")),
+    JList(xs) => {
+      let parts := list.map(xs, fn (item :: Json) -> Str { stringify(item) })
+      str.concat("[", str.concat(str.join(parts, ","), "]"))
+    },
+    JObj(es)  => {
+      let parts := list.map(es, fn (pair :: (Str, Json)) -> Str {
+        match pair { (k, v) => str.concat(
+          str.concat("\"", str.concat(escape_str(k), "\":")),
+          stringify(v))
+        }
+      })
+      str.concat("{", str.concat(str.join(parts, ","), "}"))
+    },
+  }
+}
+
+# Two-space indented variant. Top-level value gets no leading
+# whitespace; nested objects/arrays are indented.
+fn stringify_pretty(j :: Json) -> Str { stringify_at(j, 0) }
+
+fn stringify_at(j :: Json, depth :: Int) -> Str {
+  match j {
+    JNull     => "null",
+    JBool(b)  => if b { "true" } else { "false" },
+    JInt(n)   => int.to_str(n),
+    JFloat(x) => float.to_str(x),
+    JStr(s)   => str.concat("\"", str.concat(escape_str(s), "\"")),
+    JList(xs) => if list.is_empty(xs) {
+      "[]"
+    } else {
+      let inner_indent := indent_str(depth + 1)
+      let close_indent := indent_str(depth)
+      let parts := list.map(xs, fn (item :: Json) -> Str {
+        str.concat(inner_indent, stringify_at(item, depth + 1))
+      })
+      str.concat("[\n", str.concat(str.join(parts, ",\n"),
+        str.concat("\n", str.concat(close_indent, "]"))))
+    },
+    JObj(es) => if list.is_empty(es) {
+      "{}"
+    } else {
+      let inner_indent := indent_str(depth + 1)
+      let close_indent := indent_str(depth)
+      let parts := list.map(es, fn (pair :: (Str, Json)) -> Str {
+        match pair { (k, v) =>
+          str.concat(inner_indent,
+            str.concat("\"",
+              str.concat(escape_str(k),
+                str.concat("\": ", stringify_at(v, depth + 1)))))
+        }
+      })
+      str.concat("{\n", str.concat(str.join(parts, ",\n"),
+        str.concat("\n", str.concat(close_indent, "}"))))
+    },
+  }
+}
+
+# Escape a Str for embedding inside JSON quotes. We escape the
+# characters that the parser also knows how to round-trip: `"`,
+# `\`, `\n`, `\r`, `\t`. The pair is exact: any output of
+# `stringify` parses back via `parse`.
+fn escape_str(s :: Str) -> Str {
+  let chars := str.split(s, "")
+  list.fold(chars, "", fn (acc :: Str, c :: Str) -> Str {
+    str.concat(acc, escape_char(c))
+  })
+}
+
+fn escape_char(c :: Str) -> Str {
+  match c {
+    "\""  => "\\\"",
+    "\\"  => "\\\\",
+    "\n"  => "\\n",
+    "\r"  => "\\r",
+    "\t"  => "\\t",
+    _     => c,
+  }
+}
+
+fn indent_str(depth :: Int) -> Str {
+  if depth <= 0 { "" }
+  else { str.concat("  ", indent_str(depth - 1)) }
+}

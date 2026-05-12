@@ -85,7 +85,9 @@ runs end-to-end. CHANGELOG carries the exact `lex --version` used.
 | `src/combine.lex`     | `combine2..combine6`, `and_then`, `or_else`, `traverse`, `with_path` | ~180 |
 | `src/parse.lex`       | `from_json` / `from_toml` / `from_yaml` | ~50 |
 | `src/coerce.lex`      | `str → int / float / bool` coercion + Map-based `require_*` / `optional_*` | ~190 |
-| `src/json_value.lex`  | Safe-mode `Json` ADT + parser + path-aware extractors | ~430 |
+| `src/json_value.lex`  | Safe-mode `Json` ADT + parser + path-aware extractors + stringify | ~620 |
+| `src/datetime.lex`    | ISO 8601 datetime + ordered `DateCheck` bounds | ~170 |
+| `src/union.lex`       | Discriminated-union (tagged-union) dispatch | ~80 |
 
 ## Install
 
@@ -276,13 +278,15 @@ All examples in `examples/` are runnable end-to-end via
 
 | File | Demonstrates |
 |---|---|
-| `01_user_signup.lex`         | One-shot signup form validation, error accumulation |
-| `02_nested.lex`              | Nested record (User → Address) with `with_path` |
-| `03_list_of_items.lex`       | Indexed list-of-records validation (`items[3].sku`) |
-| `04_api_request.lex`         | HTTP endpoint pipeline: parse → validate → 200/400 |
+| `01_user_signup.lex`           | One-shot signup form validation, error accumulation |
+| `02_nested.lex`                | Nested record (User → Address) with `with_path` |
+| `03_list_of_items.lex`         | Indexed list-of-records validation (`items[3].sku`) |
+| `04_api_request.lex`           | HTTP endpoint pipeline: parse → validate → 200/400 |
 | `05_optional_and_defaults.lex` | `Option[T]` fields + `with_default` over a `Map[Str, Str]` source |
-| `06_coerce_query_string.lex` | Query-string parsing with coercion + constraints |
-| `07_safe_mode_json.lex`      | Safe-mode validation via the `Json` ADT — total over malformed input |
+| `06_coerce_query_string.lex`   | Query-string parsing with coercion + constraints |
+| `07_safe_mode_json.lex`        | Safe-mode validation via the `Json` ADT — total over malformed input |
+| `08_discriminated_union.lex`   | Webhook payload routing into a Lex ADT via `u.discriminate` |
+| `09_datetime_and_paths.lex`    | ISO 8601 bounds + dotted-path extraction (`organizer.email`) |
 
 Run the bad-input demos to see the full error trail:
 
@@ -301,13 +305,15 @@ lex run tests/test_field.lex       run_all
 lex run tests/test_combine.lex     run_all
 lex run tests/test_coerce.lex      run_all
 lex run tests/test_json_value.lex  run_all
+lex run tests/test_json_extra.lex  run_all   # path + stringify
+lex run tests/test_union.lex       run_all
+lex run tests/test_datetime.lex    run_all
 ```
 
-The suite covers ~80 cases across the six modules — every
+The suite covers ~110 cases across the nine modules — every
 constraint's pass/fail branches, error accumulation in `combineN`,
-path manipulation, coercion (both standalone and combined with
-constraints), and the Json ADT parser + extractors (primitives,
-containers, escapes, whitespace, malformed inputs).
+path manipulation, coercion, the Json ADT parser + extractors +
+round-trip, discriminated-union dispatch, and ISO 8601 bounds.
 
 ## Design notes
 
@@ -397,6 +403,12 @@ All are filed under the `lex-pydantic` label on
   (`Result[T, MyErrAlias]`)
 - [#329](https://github.com/alpibrusl/lex-lang/issues/329) —
   negative integer literals in match patterns (`Ok(-1)`)
+- [#331](https://github.com/alpibrusl/lex-lang/issues/331) —
+  `Instant` / `Duration` have no comparison or scalar-conversion
+  surface
+- [#332](https://github.com/alpibrusl/lex-lang/issues/332) —
+  `Str < Str` type-checks but errors at runtime (NumLt is
+  Int/Float-only)
 
 ## License
 
