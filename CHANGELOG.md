@@ -39,31 +39,56 @@ pydantic-style runtime validation on top of `lex-lang`'s stdlib.
 - `tests/test_combine.lex` — 11 cases covering `combineN`,
   `traverse`, `and_then` / `or_else`, and `with_path`.
 
-### Pinned dependencies
+### Verified against
 
-- `lex-lang` ≥ `0.7.x` (matches the stdlib surface at the time of
-  writing — `json.parse_strict` from #168, `std.regex`,
+- `lex 0.7.1` (built from `alpibrusl/lex-lang` `main`).
+- Every `src/*.lex` module type-checks under `lex check`.
+- Every test suite (`tests/test_*.lex`) returns `run_all = 0`
+  failures.
+- Every example (`examples/0{1..4}_*.lex`) runs end-to-end.
+
+### Dependencies
+
+- `lex-lang` ≥ `0.7.x` (stdlib surface in use:
+  `json.parse_strict` from #168, `std.regex`,
   `std.{toml,yaml}.parse_strict`, refinement types).
 - No native dependencies.
 
 ### Issues filed against lex-lang
 
-Tracking the small ergonomic gaps that surfaced while writing the
-library. None block any feature; they'd make user code cleaner.
+Tracking the ergonomic gaps that surfaced while writing the
+library. Each has a documented workaround in the source; the
+upstream fixes would let those workarounds go away.
 
 - [`alpibrusl/lex-lang#319`](https://github.com/alpibrusl/lex-lang/issues/319)
-  Inline type ascription `(expr :: Type)`. The library works around
-  this with typed-init helpers (`zip_index_init[T]`, `err_int`,
-  `traverse_init`, ...).
+  Inline type ascription `(expr :: Type)`. Worked around with
+  typed-init helpers (`zip_index_init[T]`, `err_int`,
+  `traverse_init`).
 - [`alpibrusl/lex-lang#320`](https://github.com/alpibrusl/lex-lang/issues/320)
   `option.unwrap_or_else` — closure-thunk default to match
   `result.or_else`.
 - [`alpibrusl/lex-lang#321`](https://github.com/alpibrusl/lex-lang/issues/321)
-  `list.enumerate` for index-paired iteration. The library
-  re-implements this locally as `zip_index` in `src/field.lex`.
+  `list.enumerate`. Re-implemented locally as `zip_index` in
+  `src/field.lex`.
 - [`alpibrusl/lex-lang#322`](https://github.com/alpibrusl/lex-lang/issues/322)
   Deep JSON type validation under `json.parse_strict` (follow-up
   to lex-lang#168). When it lands, `lex-pydantic` becomes fully
   runtime-safe end-to-end with no surface change.
+- [`alpibrusl/lex-lang#323`](https://github.com/alpibrusl/lex-lang/issues/323)
+  Type-alias asymmetry: Record aliases are transparent but
+  List/Tuple/Option aliases are nominal. Worked around by
+  writing `List[Error]` directly throughout rather than
+  defining `type Errors = List[Error]`.
+- [`alpibrusl/lex-lang#324`](https://github.com/alpibrusl/lex-lang/issues/324)
+  `_` rejected as a lambda parameter name. Worked around by
+  naming such parameters `_es` / `_x`.
+- [`alpibrusl/lex-lang#325`](https://github.com/alpibrusl/lex-lang/issues/325)
+  Float literals lack scientific notation. Worked around in
+  `FloatFinite` by computing `math.pow(10.0, 309.0)` at runtime
+  instead of an `1.79e308` literal.
+- [`alpibrusl/lex-lang#326`](https://github.com/alpibrusl/lex-lang/issues/326)
+  `regex.is_match_str` to skip the `regex.compile` round-trip.
+  Worked around with the local `re_match` helper in
+  `src/constraints.lex`.
 
-All four are tagged `lex-pydantic` in the lex-lang tracker.
+All eight are tagged `lex-pydantic` in the lex-lang tracker.

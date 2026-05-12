@@ -106,7 +106,7 @@ fn eval_str(c :: StrCheck, s :: Str) -> Option[Str] {
     StrExactLen(n) => if str.len(s) == n { None } else {
       Some(str.concat("must be exactly ", str.concat(int.to_str(n), " characters")))
     },
-    StrPattern(p) => if regex.is_match(p, s) { None } else {
+    StrPattern(p) => if re_match(p, s) { None } else {
       Some(str.concat("does not match pattern ", p))
     },
     StrOneOf(opts) => if list_contains_str(opts, s) { None } else {
@@ -118,13 +118,13 @@ fn eval_str(c :: StrCheck, s :: Str) -> Option[Str] {
     StrEndsWith(p) => if str.ends_with(s, p) { None } else {
       Some(str.concat("must end with ", p))
     },
-    StrEmail => if regex.is_match(email_pattern(), s) { None } else {
+    StrEmail => if re_match(email_pattern(), s) { None } else {
       Some("not a valid email address")
     },
-    StrUrl => if regex.is_match(url_pattern(), s) { None } else {
+    StrUrl => if re_match(url_pattern(), s) { None } else {
       Some("not a valid http(s) URL")
     },
-    StrUuid => if regex.is_match(uuid_pattern(), s) { None } else {
+    StrUuid => if re_match(uuid_pattern(), s) { None } else {
       Some("not a valid UUID")
     },
   }
@@ -140,9 +140,10 @@ fn eval_int(c :: IntCheck, n :: Int) -> Option[Str] {
     } else { None },
     IntInRange(lo, hi) => if n < lo {
       Some(str.concat("must be >= ", int.to_str(lo)))
-    } else if n > hi {
-      Some(str.concat("must be <= ", int.to_str(hi)))
-    } else { None },
+    } else {
+      if n > hi { Some(str.concat("must be <= ", int.to_str(hi))) }
+      else      { None }
+    },
     IntEq(target) => if n == target { None } else {
       Some(str.concat("must equal ", int.to_str(target)))
     },
@@ -165,12 +166,15 @@ fn eval_float(c :: FloatCheck, x :: Float) -> Option[Str] {
     } else { None },
     FloatInRange(lo, hi) => if x < lo {
       Some(str.concat("must be >= ", float.to_str(lo)))
-    } else if x > hi {
-      Some(str.concat("must be <= ", float.to_str(hi)))
-    } else { None },
-    # `math.abs(x) == math.abs(x)` is true for everything except NaN;
-    # comparing against +inf catches infinities. Cheap finite test.
-    FloatFinite => if math.abs(x) < 1.7976931348623157e308 and (x == x) {
+    } else {
+      if x > hi { Some(str.concat("must be <= ", float.to_str(hi))) }
+      else      { None }
+    },
+    # NaN detection: NaN is the only float for which `x != x`. We can
+    # rule out infinities by comparing against `math.pow(10, 309)`
+    # (which evaluates to +inf at runtime since f64 tops out near
+    # 1.8e308 and Lex floats have no exponent literal syntax).
+    FloatFinite => if (x == x) and (math.abs(x) < math.pow(10.0, 309.0)) {
       None
     } else { Some("must be a finite number") },
     FloatPositive => if x > 0.0 { None } else { Some("must be > 0") },
@@ -194,6 +198,18 @@ fn eval_list(c :: ListCheck, n :: Int) -> Option[Str] {
 }
 
 # ---- Internal helpers ---------------------------------------------
+
+# Pattern → Bool wrapper. `regex.is_match` is typed `Regex -> Str -> Bool`
+# in lex-types, so callers have to round-trip through `regex.compile`
+# even though the runtime stores the compiled regex as the original
+# pattern string anyway. Bad patterns surface as a non-match — same
+# behavior as a successful no-match.
+fn re_match(pattern :: Str, s :: Str) -> Bool {
+  match regex.compile(pattern) {
+    Ok(r)  => regex.is_match(r, s),
+    Err(_) => false,
+  }
+}
 
 fn list_contains_str(xs :: List[Str], needle :: Str) -> Bool {
   list.fold(xs, false, fn (acc :: Bool, x :: Str) -> Bool {

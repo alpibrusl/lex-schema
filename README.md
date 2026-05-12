@@ -35,12 +35,13 @@ fn parse_user(input :: Str) -> Result[User, e.Errors] {
 
 ```bash
 $ lex run examples/01_user_signup.lex format_demo
-"email: not a valid email address [email]
-username: must be at least 3 characters [min_len]
-username: does not match pattern ^[a-zA-Z0-9_]+$ [pattern]
-age: must be >= 13 [min]
-password: must be at least 8 characters [min_len]
-password: does not match pattern .*[0-9].* [pattern]"
+"email: not a valid email address [email]\nusername: must be at least 3 characters [min_len]\nusername: does not match pattern ^[a-zA-Z0-9_]+$ [pattern]\nage: must be >= 13 [min]\npassword: must be at least 8 characters [min_len]\npassword: does not match pattern .*[0-9].* [pattern]"
+
+$ lex run examples/02_nested.lex format_demo
+"email: not a valid email address [email]\naddress.street: must be at least 1 characters [min_len]\naddress.city: must be at least 1 characters [min_len]\naddress.zip: does not match pattern ^[0-9]{5}$ [pattern]\naddress.country: does not match pattern ^[A-Z]{2}$ [pattern]"
+
+$ lex run examples/03_list_of_items.lex format_demo
+"customer: must be at least 1 characters [min_len]\nitems[0].sku: does not match pattern ^[A-Z]{3}-[0-9]{4}$ [pattern]\nitems[1].quantity: must be > 0 [min]\nitems[1].price_cents: must be >= 0 [min]\nitems[2].sku: does not match pattern ^[A-Z]{3}-[0-9]{4}$ [pattern]\nitems[2].quantity: must be > 0 [min]"
 ```
 
 ## Why a validation library at all?
@@ -71,7 +72,10 @@ deliberately doesn't model. `lex-pydantic` covers the gap:
 
 Pre-1.0. The surface is small (5 modules, ~700 lines), and stable in
 the sense that no breaking changes are planned for the listed API.
-Tested against lex-lang `main` (rev pinned in `CHANGELOG.md`).
+Verified against lex-lang `v0.7.1`: every `src/` module
+type-checks (`lex check`), every test suite returns `0` failures
+(`lex run tests/test_*.lex run_all`), and every `examples/` demo
+runs end-to-end. CHANGELOG carries the exact `lex --version` used.
 
 | Module | Purpose | LoC |
 |---|---|---|
@@ -291,9 +295,10 @@ internet input has the same caveat lex itself has today.
 
 ### Issues filed against lex-lang
 
-While building this library a few small ergonomic gaps came up. They
-don't block any of the features here, but they'd make the code
-cleaner. Each is filed under the `lex-pydantic` label on
+While building this library, a handful of small ergonomic gaps in
+Lex came up. None block any feature here — the library works
+around each one — but fixing them upstream would simplify code.
+All are filed under the `lex-pydantic` label on
 [`alpibrusl/lex-lang`](https://github.com/alpibrusl/lex-lang):
 
 - [#319](https://github.com/alpibrusl/lex-lang/issues/319) — inline
@@ -304,6 +309,15 @@ cleaner. Each is filed under the `lex-pydantic` label on
   `list.enumerate`
 - [#322](https://github.com/alpibrusl/lex-lang/issues/322) — deep
   JSON type validation under `json.parse_strict`
+- [#323](https://github.com/alpibrusl/lex-lang/issues/323) —
+  type aliases for `List[Y]` should unfold transparently like
+  Record aliases do
+- [#324](https://github.com/alpibrusl/lex-lang/issues/324) —
+  `_` as a lambda parameter name
+- [#325](https://github.com/alpibrusl/lex-lang/issues/325) —
+  scientific-notation float literals (`1.79e308`)
+- [#326](https://github.com/alpibrusl/lex-lang/issues/326) —
+  `regex.is_match_str` to skip the compile round-trip
 
 ## License
 

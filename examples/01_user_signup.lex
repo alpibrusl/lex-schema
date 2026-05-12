@@ -46,7 +46,7 @@ type RawUser = {
   password :: Str,
 }
 
-fn validate(raw :: RawUser) -> Result[User, e.Errors] {
+fn validate(raw :: RawUser) -> Result[User, List[e.Error]] {
   cm.combine4(
     f.check_str("email",    raw.email,    [StrEmail]),
     f.check_str("username", raw.username, [StrMinLen(3), StrMaxLen(32),
@@ -60,22 +60,22 @@ fn validate(raw :: RawUser) -> Result[User, e.Errors] {
 
 # ---- End-to-end: parse JSON, then validate ------------------------
 
-fn parse_and_validate(input :: Str) -> Result[User, e.Errors] {
+fn parse_and_validate(input :: Str) -> Result[User, List[e.Error]] {
   cm.and_then(
     p.from_json(input, ["email", "username", "age", "password"]),
-    fn (raw :: RawUser) -> Result[User, e.Errors] { validate(raw) }
+    fn (raw :: RawUser) -> Result[User, List[e.Error]] { validate(raw) }
   )
 }
 
 # ---- Demo entrypoints (callable from `lex run`) -------------------
 
-fn validate_good() -> Result[User, e.Errors] {
+fn validate_good() -> Result[User, List[e.Error]] {
   parse_and_validate(
     "{\"email\":\"alice@example.com\",\"username\":\"alice_42\",\"age\":29,\"password\":\"correcthorse9\"}"
   )
 }
 
-fn validate_bad() -> Result[User, e.Errors] {
+fn validate_bad() -> Result[User, List[e.Error]] {
   # All four fields are wrong: invalid email, username too short and
   # has a `!`, age below minimum, password too short and no digit.
   parse_and_validate(
