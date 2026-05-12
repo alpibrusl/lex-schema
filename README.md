@@ -93,6 +93,8 @@ runs end-to-end. CHANGELOG carries the exact `lex --version` used.
 | `src/property.lex`    | Schema-driven sample generation + round-trip property check | ~310 |
 | `src/schema_import.lex` | JSON Schema → `ModelSchema` (inverse of `to_json_schema`) | ~220 |
 | `src/sdk.lex`         | `ModelSchema` → TypeScript / Python codegen for client SDKs | ~340 |
+| `src/validator.lex`   | `Validator` bundle (schema + pre-computed exports + validate) | ~70 |
+| `src/fuzz.lex`        | Malformed-input fuzz driver — every category surfaces as `Err` | ~140 |
 
 ## Install
 
@@ -300,6 +302,8 @@ All examples in `examples/` are runnable end-to-end via
 | `15_sdk_export.lex`            | Generate TypeScript interfaces + Pydantic v2 classes from one schema |
 | `16_validation_service.lex`    | HTTP `/v1/validate` service accepting `{schema, payload}` over the wire |
 | `17_webhook_dedup.lex`         | SHA-256 idempotency keying on top of the discriminator pattern |
+| `18_cli_codegen.lex`           | Load a JSON Schema file from disk, emit TS / Python / JSON-Schema text |
+| `19_fuzz_driver.lex`           | Run 30+ malformed inputs through a schema; assert every one surfaces as `Err` |
 
 Run the bad-input demos to see the full error trail:
 
@@ -327,9 +331,11 @@ lex run tests/test_cross_field.lex run_all
 lex run tests/test_property.lex    run_all
 lex run tests/test_schema_import.lex run_all
 lex run tests/test_sdk.lex          run_all
+lex run tests/test_validator.lex    run_all
+lex run tests/test_fuzz.lex         run_all
 ```
 
-The suite covers ~170 cases across the fourteen modules — every
+The suite covers ~185 cases across the sixteen modules — every
 constraint's pass/fail branches, error accumulation in `combineN`,
 path manipulation, coercion, the Json ADT parser + extractors +
 round-trip, discriminated-union dispatch, and ISO 8601 bounds.
@@ -437,6 +443,10 @@ All are filed under the `lex-pydantic` label on
   panic far from the source when a `match` is mixed with `or`
 - [#338](https://github.com/alpibrusl/lex-lang/issues/338) —
   `list.sort_by[T, K]` for canonicalization / dedup pipelines
+- [#339](https://github.com/alpibrusl/lex-lang/issues/339) —
+  top-level fn whose name shadows a cross-module parameter is
+  passed as a closure value (silent miscompile, panic far from
+  the source)
 
 ## License
 

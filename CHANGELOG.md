@@ -2,6 +2,49 @@
 
 All notable changes to lex-pydantic are tracked here.
 
+## [Unreleased] — 0.7.0
+
+### Added
+
+- `src/validator.lex` — `Validator` bundle. `make(schema)` runs
+  every emitter once and stores results in a single record; the
+  caller passes one value around for both runtime validation
+  (`validate`, `validate_str`) and codegen (`export_typescript`,
+  `export_python`, `export_json_schema_str`, `export_openapi_str`).
+- `src/fuzz.lex` — malformed-input fuzz driver. Five hand-picked
+  catalogues (parse failures, type mismatches, missing required,
+  constraint failures, deep nesting) walk through the schema's
+  validator. The pass condition is `count_escapes == 0` *and* no
+  VM panic; the latter is enforced by the run completing.
+- `examples/18_cli_codegen.lex` — read a JSON Schema file from
+  disk, emit any of TypeScript / Python / JSON Schema / OpenAPI
+  / summary, or validate a payload file against it. Uses `io.read`
+  + the validator bundle for a Makefile-friendly surface.
+- `examples/19_fuzz_driver.lex` — run all five fuzz catalogues
+  against a User schema. The reference output is `0` escapes;
+  every regression is loud.
+- `tests/test_validator.lex` — 9 cases (make, summary,
+  validate_str happy/sad/parse-failure, exports for all four
+  formats).
+- `tests/test_fuzz.lex` — 4 cases (zero escapes, per-category
+  100%, format renders every category, corpus non-empty).
+
+### Issues filed
+
+- [`#339`](https://github.com/alpibrusl/lex-lang/issues/339)
+  top-level fn whose name shadows a cross-module parameter is
+  passed as a closure value, producing a silent miscompile that
+  surfaces as `GetField on non-record: Closure { fn_id: N, ... }`
+  far from the call site. Worked around by renaming test
+  fixtures from `schema()` to `fixture_schema()`.
+
+### Verified against
+
+- `lex 0.7.1`.
+- 17 of 17 test suites: 0 failures (~185 cases).
+- 19 of 19 examples run end-to-end.
+- Every `src/*.lex` module `lex check`s cleanly.
+
 ## [Unreleased] — 0.6.0
 
 ### Added
