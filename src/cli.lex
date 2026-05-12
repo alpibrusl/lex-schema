@@ -1,4 +1,4 @@
-# lex-pydantic — std.cli integration
+# lex-schema — std.cli integration
 #
 # `std.cli`'s `parse` returns a `Json` value with the shape
 #

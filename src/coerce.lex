@@ -1,4 +1,4 @@
-# lex-pydantic — type coercion
+# lex-schema — type coercion
 #
 # Pydantic v1-style "lax" parsing for fields that arrive as a string
 # but should be a richer type downstream. Most useful at trust
@@ -7,7 +7,7 @@
 #
 # Each `coerce_xxx` is paired with a `check_str_as_xxx` that runs
 # the coercion *and* a typed-constraint list in one call —
-# preserving lex-pydantic's "every check returns Result[T, Errors]"
+# preserving lex-schema's "every check returns Result[T, Errors]"
 # regularity so callers can drop them straight into `combineN`.
 #
 # Coercion failures use `code = "type"`; downstream constraint

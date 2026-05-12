@@ -1,4 +1,4 @@
-# lex-pydantic — `/v1/validate` HTTP service
+# lex-schema — `/v1/validate` HTTP service
 #
 # A small REST endpoint that takes a JSON Schema + a JSON payload
 # over the wire and runs the payload through the schema. Returns

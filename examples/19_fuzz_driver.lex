@@ -1,4 +1,4 @@
-# lex-pydantic — fuzz driver demo
+# lex-schema — fuzz driver demo
 #
 # Run every malformed-input catalogue against a User schema and
 # print the tally. The contract is "every input in every category

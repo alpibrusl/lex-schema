@@ -1,4 +1,4 @@
-# lex-pydantic — property-based testing
+# lex-schema — property-based testing
 #
 # Generate random values from a `ModelSchema`, run them through
 # `s.validate`, and assert the round-trip property: every

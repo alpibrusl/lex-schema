@@ -1,4 +1,4 @@
-# lex-pydantic — JSON / TOML / YAML entry points
+# lex-schema — JSON / TOML / YAML entry points
 #
 # Thin wrappers around `std.json.parse_strict` (and TOML/YAML
 # variants) that surface the outer-shell parse failure as a

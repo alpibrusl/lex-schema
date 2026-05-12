@@ -1,4 +1,4 @@
-# lex-pydantic — datetime constraints + dotted-path extraction
+# lex-schema — datetime constraints + dotted-path extraction
 #
 # A scheduled-event payload exercising both new pieces:
 #

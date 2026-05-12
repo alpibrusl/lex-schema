@@ -1,7 +1,7 @@
-# lex-pydantic — optional fields + defaults
+# lex-schema — optional fields + defaults
 #
 # Two distinct patterns sit under the "optional" umbrella in
-# pydantic, and lex-pydantic separates them cleanly:
+# pydantic, and lex-schema separates them cleanly:
 #
 #   1. `Optional[str] = None`  — field stays as `Option[T]` in the
 #      model. Use `f.check_optional_str` etc.

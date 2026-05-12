@@ -1,4 +1,4 @@
-# lex-pydantic — error types
+# lex-schema — error types
 #
 # A validation library models failures as a flat list of structured
 # `Error` records so a single call to `validate` can report *every*

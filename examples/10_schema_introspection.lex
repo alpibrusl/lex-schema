@@ -1,4 +1,4 @@
-# lex-pydantic — schema-driven validation + OpenAPI export
+# lex-schema — schema-driven validation + OpenAPI export
 #
 # A `ModelSchema` is a value: a list of `Field` records, each
 # carrying its constraints inline. From one schema you get three

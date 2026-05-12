@@ -1,4 +1,4 @@
-# lex-pydantic — applicative combinators
+# lex-schema — applicative combinators
 #
 # These functions lift N field validators into a single record
 # builder, accumulating *every* failure across the N branches rather

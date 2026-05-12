@@ -1,4 +1,4 @@
-# lex-pydantic — fuzz driver
+# lex-schema — fuzz driver
 #
 # Complements `property.lex` from the other end. Where `property`
 # generates *valid* inputs and asserts they pass validation, this

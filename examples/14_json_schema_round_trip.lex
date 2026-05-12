@@ -1,4 +1,4 @@
-# lex-pydantic — JSON Schema round-trip
+# lex-schema — JSON Schema round-trip
 #
 # Start with a ModelSchema, emit JSON Schema, parse the JSON
 # back into a ModelSchema, and validate the same payload against

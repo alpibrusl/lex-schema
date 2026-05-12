@@ -1,4 +1,4 @@
-# lex-pydantic — discriminated-union (tagged-union) parsing
+# lex-schema — discriminated-union (tagged-union) parsing
 #
 # Real-world webhook payloads frequently arrive as a heterogeneous
 # stream, distinguished by a tag field:

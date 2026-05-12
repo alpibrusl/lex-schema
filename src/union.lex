@@ -1,4 +1,4 @@
-# lex-pydantic — tagged-union (discriminated-union) validation
+# lex-schema — tagged-union (discriminated-union) validation
 #
 # JSON payloads like
 #

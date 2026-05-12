@@ -1,4 +1,4 @@
-# lex-pydantic — CLI-arg validation
+# lex-schema — CLI-arg validation
 #
 # A `gen` subcommand that takes a positional path, an `--output`
 # option, and a `--verbose` flag. The CLI spec lives in `std.cli`;

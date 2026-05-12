@@ -1,4 +1,4 @@
-# lex-pydantic — basic signup validation
+# lex-schema — basic signup validation
 #
 # Mirrors the canonical pydantic example: validate a signup form
 # carried as a JSON body, return either a typed `User` record or
@@ -18,7 +18,7 @@ import "../src/combine"     as cm
 import "../src/parse"       as p
 
 # ---- Target type --------------------------------------------------
-# The shape your code wants to *consume* downstream. lex-pydantic
+# The shape your code wants to *consume* downstream. lex-schema
 # never invents this for you; you write the Lex type and it stays
 # the single source of truth.
 

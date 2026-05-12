@@ -1,6 +1,6 @@
-# lex-pydantic — HTTP API request body validation
+# lex-schema — HTTP API request body validation
 #
-# A small REST endpoint that uses lex-pydantic to validate the
+# A small REST endpoint that uses lex-schema to validate the
 # incoming JSON body, returning 200 + the typed result or 400 +
 # the full error list.
 #

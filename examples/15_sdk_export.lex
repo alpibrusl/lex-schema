@@ -1,4 +1,4 @@
-# lex-pydantic — SDK code generation
+# lex-schema — SDK code generation
 #
 # A `User` schema generates three artifacts off one source of
 # truth:

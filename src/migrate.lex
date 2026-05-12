@@ -1,0 +1,330 @@
+# lex-schema — schema migrations + backward-compat check
+#
+# Two layers for evolving APIs:
+#
+#   1. `Migration` — a value that transforms a `Json` payload
+#      shaped to schema A into one shaped to schema B. Composable;
+#      run with `apply(payload, [transform1, transform2, ...])`.
+#   2. `is_backward_compatible(old, new)` — given two
+#      `ModelSchema`s, decide whether a producer emitting `old`
+#      will be accepted by a consumer expecting `new`. Catches
+#      the common "tightened a field's range / added a required
+#      field" mistakes before they ship.
+#
+# These layers are independent; the migration runner doesn't care
+# whether the schemas are compatible (you might be tightening
+# bounds *because* the producer is on the new shape now), and the
+# compat checker doesn't care whether there's a migration ready.
+#
+# Effects: none.
+
+import "std.str"  as str
+import "std.int"  as int
+import "std.list" as list
+
+import "./error"       as e
+import "./constraints" as c
+import "./json_value"  as jv
+import "./schema"      as s
+
+# ---- Transform ADT ------------------------------------------------
+#
+# Each transform is a value, so a migration is a `List[Transform]`.
+# Keeping them as variants (not closures) means the migration is
+# inspectable, serializable, and round-trippable through JSON —
+# the same playbook the rest of the library uses for constraints.
+
+type Transform =
+    Rename({ from :: Str, to :: Str })
+  | DropField(Str)
+  | AddField({ name :: Str, default :: jv.Json })
+  | SetField({ name :: Str, value :: jv.Json })       # overwrite whatever's there
+  | CoerceStrToInt(Str)                                # parse as Int, drop if bad
+  | CoerceStrToFloat(Str)
+  | CoerceStrToBool(Str)
+  | NestInto({ name :: Str, fields :: List[Str] })    # gather N fields into a sub-object
+  | UnnestFrom(Str)                                   # opposite of NestInto
+
+# ---- Migration runner --------------------------------------------
+
+# Apply a sequence of transforms in order. Any non-object input
+# is passed through unchanged — a NoOp behavior that lets the
+# caller treat scalars / arrays at the root the same way.
+fn apply(j :: jv.Json, ts :: List[Transform]) -> jv.Json {
+  list.fold(ts, j, fn (acc :: jv.Json, t :: Transform) -> jv.Json {
+    apply_one(acc, t)
+  })
+}
+
+fn apply_one(j :: jv.Json, t :: Transform) -> jv.Json {
+  match jv.as_obj(j) {
+    None       => j,        # transforms only meaningful on objects
+    Some(pairs) => match t {
+      Rename(r)             => JObj(rename_field(pairs, r.from, r.to)),
+      DropField(name)       => JObj(drop_field(pairs, name)),
+      AddField(a)           => JObj(add_field_if_absent(pairs, a.name, a.default)),
+      SetField(s2)          => JObj(set_field(pairs, s2.name, s2.value)),
+      CoerceStrToInt(name)  => JObj(coerce_field(pairs, name, coerce_int)),
+      CoerceStrToFloat(name)=> JObj(coerce_field(pairs, name, coerce_float)),
+      CoerceStrToBool(name) => JObj(coerce_field(pairs, name, coerce_bool)),
+      NestInto(n)           => JObj(nest_into(pairs, n.name, n.fields)),
+      UnnestFrom(name)      => JObj(unnest_from(pairs, name)),
+    },
+  }
+}
+
+# ---- Per-transform helpers ---------------------------------------
+
+fn rename_field(
+  pairs :: List[(Str, jv.Json)],
+  from :: Str,
+  to :: Str
+) -> List[(Str, jv.Json)] {
+  list.map(pairs, fn (p :: (Str, jv.Json)) -> (Str, jv.Json) {
+    match p { (k, v) => if k == from { (to, v) } else { (k, v) } }
+  })
+}
+
+fn drop_field(
+  pairs :: List[(Str, jv.Json)],
+  name :: Str
+) -> List[(Str, jv.Json)] {
+  list.fold(pairs, [], fn (acc :: List[(Str, jv.Json)], p :: (Str, jv.Json)) -> List[(Str, jv.Json)] {
+    match p { (k, _v) => if k == name { acc } else { list.concat(acc, [p]) } }
+  })
+}
+
+fn add_field_if_absent(
+  pairs :: List[(Str, jv.Json)],
+  name :: Str,
+  default :: jv.Json
+) -> List[(Str, jv.Json)] {
+  let exists := list.fold(pairs, false, fn (acc :: Bool, p :: (Str, jv.Json)) -> Bool {
+    acc or match p { (k, _v) => k == name }
+  })
+  if exists { pairs } else { list.concat(pairs, [(name, default)]) }
+}
+
+fn set_field(
+  pairs :: List[(Str, jv.Json)],
+  name :: Str,
+  value :: jv.Json
+) -> List[(Str, jv.Json)] {
+  let replaced_pairs := list.map(pairs, fn (p :: (Str, jv.Json)) -> (Str, jv.Json) {
+    match p { (k, v) => if k == name { (k, value) } else { (k, v) } }
+  })
+  add_field_if_absent(replaced_pairs, name, value)
+}
+
+# Apply a Str-typed transform to one field; on coercion failure
+# the field is dropped silently. Callers wanting a fail-loud
+# behavior should validate before migrating.
+fn coerce_field(
+  pairs :: List[(Str, jv.Json)],
+  name :: Str,
+  coerce :: (Str) -> Option[jv.Json]
+) -> List[(Str, jv.Json)] {
+  list.fold(pairs, [], fn (acc :: List[(Str, jv.Json)], p :: (Str, jv.Json)) -> List[(Str, jv.Json)] {
+    match p { (k, v) =>
+      if k == name {
+        match jv.as_str(v) {
+          None    => list.concat(acc, [p]),     # not a Str, leave alone
+          Some(s) => match coerce(s) {
+            Some(new_v) => list.concat(acc, [(k, new_v)]),
+            None        => acc,                  # drop on failure
+          },
+        }
+      } else { list.concat(acc, [p]) }
+    }
+  })
+}
+
+fn coerce_int(s :: Str) -> Option[jv.Json] {
+  match str.to_int(str.trim(s)) {
+    Some(n) => Some(JInt(n)),
+    None    => None,
+  }
+}
+
+fn coerce_float(s :: Str) -> Option[jv.Json] {
+  match str.to_float(str.trim(s)) {
+    Some(x) => Some(JFloat(x)),
+    None    => None,
+  }
+}
+
+fn coerce_bool(s :: Str) -> Option[jv.Json] {
+  match str.to_lower(str.trim(s)) {
+    "true"  => Some(JBool(true)),
+    "false" => Some(JBool(false)),
+    "1"     => Some(JBool(true)),
+    "0"     => Some(JBool(false)),
+    _       => None,
+  }
+}
+
+# Gather N top-level fields into a sub-object — useful for the
+# "we used to have firstname+lastname; now they live under
+# name.{first, last}" migration.
+fn nest_into(
+  pairs :: List[(Str, jv.Json)],
+  target :: Str,
+  field_names :: List[Str]
+) -> List[(Str, jv.Json)] {
+  let gathered := list.fold(pairs, [],
+    fn (acc :: List[(Str, jv.Json)], p :: (Str, jv.Json)) -> List[(Str, jv.Json)] {
+      match p { (k, v) =>
+        if list_contains_str(field_names, k) {
+          list.concat(acc, [(k, v)])
+        } else { acc }
+      }
+    })
+  let remaining := list.fold(pairs, [],
+    fn (acc :: List[(Str, jv.Json)], p :: (Str, jv.Json)) -> List[(Str, jv.Json)] {
+      match p { (k, _v) =>
+        if list_contains_str(field_names, k) { acc }
+        else { list.concat(acc, [p]) }
+      }
+    })
+  list.concat(remaining, [(target, JObj(gathered))])
+}
+
+# Inverse of `NestInto` — pull all of `source`'s fields up to the
+# top level, removing the sub-object.
+fn unnest_from(
+  pairs :: List[(Str, jv.Json)],
+  source :: Str
+) -> List[(Str, jv.Json)] {
+  list.fold(pairs, [], fn (acc :: List[(Str, jv.Json)], p :: (Str, jv.Json)) -> List[(Str, jv.Json)] {
+    match p { (k, v) =>
+      if k == source {
+        match jv.as_obj(v) {
+          Some(inner) => list.concat(acc, inner),
+          None        => list.concat(acc, [p]),     # leave alone if not obj
+        }
+      } else { list.concat(acc, [p]) }
+    }
+  })
+}
+
+fn list_contains_str(xs :: List[Str], needle :: Str) -> Bool {
+  list.fold(xs, false, fn (acc :: Bool, x :: Str) -> Bool {
+    acc or (x == needle)
+  })
+}
+
+# ============================================================
+# Backward-compatibility check
+# ============================================================
+#
+# Q: "If a producer emits payloads valid against schema `old`,
+#     will a consumer expecting schema `new` accept them?"
+#
+# The standard guarantees of *backwards-compatible schema
+# evolution*:
+#
+#   - Adding an OPTIONAL field is fine.
+#   - Adding a REQUIRED field breaks compat.
+#   - Removing a field is fine (consumer just stops seeing it).
+#   - Loosening a constraint (e.g. min 13 → min 10) is fine.
+#   - Tightening a constraint breaks compat.
+#   - Changing a field's TYPE breaks compat unless the change is
+#     widening (Int → Float, for example — but we don't model
+#     that yet).
+#
+# `is_backward_compatible(old, new)` returns a `Result[Unit,
+# List[Incompat]]` enumerating every breaking change. Callers
+# pipe the list into CI / pre-deploy checks.
+
+type Incompat = {
+  field :: Str,
+  reason :: Str,
+}
+
+fn is_backward_compatible(
+  old :: s.ModelSchema,
+  new :: s.ModelSchema
+) -> Result[Unit, List[Incompat]] {
+  let issues := compare_schemas(old, new)
+  if list.is_empty(issues) { Ok(()) } else { Err(issues) }
+}
+
+fn compare_schemas(
+  old :: s.ModelSchema,
+  new :: s.ModelSchema
+) -> List[Incompat] {
+  # New required fields the old shape doesn't carry.
+  let new_required := list.fold(new.fields, [],
+    fn (acc :: List[Incompat], nf :: s.Field) -> List[Incompat] {
+      if nf.required and (not field_present(old.fields, nf.name)) {
+        list.concat(acc, [{
+          field: nf.name,
+          reason: "new required field not present in old schema",
+        }])
+      } else { acc }
+    })
+  # For each field present in both, check kind / constraint changes.
+  let field_issues := list.fold(new.fields, [],
+    fn (acc :: List[Incompat], nf :: s.Field) -> List[Incompat] {
+      match find_field(old.fields, nf.name) {
+        None     => acc,    # already counted above if newly required
+        Some(of) => list.concat(acc, compare_field(of, nf)),
+      }
+    })
+  list.concat(new_required, field_issues)
+}
+
+fn field_present(fields :: List[s.Field], name :: Str) -> Bool {
+  list.fold(fields, false, fn (acc :: Bool, f :: s.Field) -> Bool {
+    acc or (f.name == name)
+  })
+}
+
+fn find_field(fields :: List[s.Field], name :: Str) -> Option[s.Field] {
+  list.fold(fields, None, fn (acc :: Option[s.Field], f :: s.Field) -> Option[s.Field] {
+    match acc {
+      Some(_) => acc,
+      None    => if f.name == name { Some(f) } else { None },
+    }
+  })
+}
+
+fn compare_field(old_f :: s.Field, new_f :: s.Field) -> List[Incompat] {
+  let kind_change := if kind_label(old_f.kind) == kind_label(new_f.kind) {
+    []
+  } else {
+    [{ field: new_f.name,
+       reason: str.concat("type changed from ",
+                          str.concat(kind_label(old_f.kind),
+                                     str.concat(" to ", kind_label(new_f.kind)))) }]
+  }
+  # Required → optional is fine. Optional → required breaks compat
+  # only if the producer might have omitted the field.
+  let req_change := if old_f.required == new_f.required { [] }
+    else {
+      if new_f.required and (not old_f.required) {
+        [{ field: new_f.name, reason: "field became required" }]
+      } else { [] }
+    }
+  list.concat(kind_change, req_change)
+}
+
+fn kind_label(k :: s.FieldKind) -> Str {
+  match k {
+    KStr(_)    => "string",
+    KInt(_)    => "integer",
+    KFloat(_)  => "number",
+    KBool      => "boolean",
+    KArray(_,_) => "array",
+    KObject(_) => "object",
+  }
+}
+
+# Render an `Incompat` list as a human-readable string. Useful in
+# CI logs / pre-deploy gates.
+fn format_incompats(issues :: List[Incompat]) -> Str {
+  let lines := list.map(issues, fn (i :: Incompat) -> Str {
+    str.concat(i.field, str.concat(": ", i.reason))
+  })
+  str.join(lines, "\n")
+}

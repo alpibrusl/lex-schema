@@ -1,13 +1,75 @@
 # Changelog
 
-All notable changes to lex-pydantic are tracked here.
+All notable changes to lex-schema are tracked here.
+
+## [Unreleased] — 0.8.0
+
+### Renamed
+
+The library is now **lex-schema** (was `lex-pydantic` through
+v0.7.x). pydantic remains the credited inspiration for the
+constraint catalog + multi-error accumulation; the new name
+better reflects that this is a Lex-native library, not a
+port. The `lex-pydantic` label on the issue tracker stays for
+historical references.
+
+### Added
+
+- `src/constraints.lex` — nine new `StrCheck` variants:
+  `StrIPv4`, `StrIPv6`, `StrHostname`, `StrIsoDate`,
+  `StrIsoTime`, `StrBase64`, `StrHex`, `StrPhoneE164`,
+  `StrCreditCardLuhn` (with Luhn-algorithm checksum). Each maps
+  to the appropriate JSON Schema `format` keyword and to the
+  matching Zod / pydantic / Rust-doc rendering.
+- `src/problem.lex` — RFC 7807 `application/problem+json`
+  renderer. `validation_problem(type, instance, errors)`
+  produces the standard envelope. Helpers for the common HTTP
+  status presets (`not_found`, `method_not_allowed`,
+  `unauthorized`, `forbidden`, `bad_request`,
+  `internal_server_error`). `to_json` / `to_str` /
+  `to_pretty` / `to_response` for serialization.
+- `src/migrate.lex` — schema migrations + backward-compat check.
+  - `Transform` ADT with `Rename` / `DropField` / `AddField`
+    / `SetField` / `CoerceStrToInt` / `CoerceStrToFloat` /
+    `CoerceStrToBool` / `NestInto` / `UnnestFrom`.
+  - `apply(json, [transform, ...])` runs them in sequence.
+  - `is_backward_compatible(old, new)` returns `Ok(())` or
+    `Err([Incompat{field, reason}])`. Flags new required fields,
+    type changes, optional → required transitions.
+- `src/sdk.lex` — two new codegen backends:
+  - `to_zod(schema)` emits a Zod schema (TypeScript runtime
+    validation). Chain syntax with `.min` / `.max` / `.email` /
+    `.regex` / `.ip` / `.optional` / `.nonempty`.
+  - `to_rust_struct(schema)` emits a `#[derive(Debug, Clone,
+    Serialize, Deserialize)]` struct with `Option<T>` +
+    `#[serde(default)]` for optionals and constraint metadata
+    in `///` doc comments.
+- `examples/20_payments_api.lex` — combined tour: a payments
+  schema using IP + Luhn + phone validators, RFC 7807 error
+  responses, all four codegen backends (TS / Python / Zod /
+  Rust), and a v1 → v2 migration with a compat-check failure.
+- `tests/test_formats.lex` — 21 cases across all nine new
+  format validators.
+- `tests/test_problem.lex` — 9 cases (envelope shape, status
+  presets, serialization).
+- `tests/test_sdk_more.lex` — 10 cases (Zod + Rust codegen
+  coverage).
+- `tests/test_migrate.lex` — 12 cases (each transform + chained
+  transforms + compat check truth table).
+
+### Verified against
+
+- `lex 0.8.2`.
+- 21 of 21 test suites: 0 failures (~245 cases).
+- 20 of 20 examples run end-to-end.
+- Every `src/*.lex` module `lex check`s cleanly.
 
 ## [Unreleased] — 0.7.2
 
 ### Pinned lex version
 
 - Built against `lex 0.8.2`. The 0.8.2 release closed the last
-  three lex-pydantic-labeled issues:
+  three lex-schema-labeled issues:
   - **#331** — `datetime.before` / `datetime.after` /
     `datetime.compare` (and a new `std.duration` module with
     `duration.seconds`).
@@ -41,7 +103,7 @@ All notable changes to lex-pydantic are tracked here.
 
 ### Issue tracker rollup
 
-After 0.8.2, **zero** lex-pydantic-labeled issues remain open. The
+After 0.8.2, **zero** lex-schema-labeled issues remain open. The
 library now compiles and runs against vanilla `lex` with no
 workarounds. Sixteen filed → sixteen closed:
 
@@ -105,7 +167,7 @@ workarounds. Sixteen filed → sixteen closed:
 
 ### Issue tracker rollup
 
-After 0.8.0, the open lex-pydantic-labeled issues drop from 16 to
+After 0.8.0, the open lex-schema-labeled issues drop from 16 to
 3 (one was re-opened as #345 above):
 
 - **#331** Instant / Duration comparison surface.
@@ -477,7 +539,7 @@ upstream fixes would let those workarounds go away.
   `src/field.lex`.
 - [`alpibrusl/lex-lang#322`](https://github.com/alpibrusl/lex-lang/issues/322)
   Deep JSON type validation under `json.parse_strict` (follow-up
-  to lex-lang#168). When it lands, `lex-pydantic` becomes fully
+  to lex-lang#168). When it lands, `lex-schema` becomes fully
   runtime-safe end-to-end with no surface change.
 - [`alpibrusl/lex-lang#323`](https://github.com/alpibrusl/lex-lang/issues/323)
   Type-alias asymmetry: Record aliases are transparent but
@@ -496,4 +558,4 @@ upstream fixes would let those workarounds go away.
   Worked around with the local `re_match` helper in
   `src/constraints.lex`.
 
-All eight are tagged `lex-pydantic` in the lex-lang tracker.
+All eight are tagged `lex-schema` in the lex-lang tracker.

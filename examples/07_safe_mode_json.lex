@@ -1,4 +1,4 @@
-# lex-pydantic — safe-mode JSON validation
+# lex-schema — safe-mode JSON validation
 #
 # Same shape as `01_user_signup.lex`, but built on the `json_value`
 # module's `Json` ADT rather than `std.json.parse_strict`. The

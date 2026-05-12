@@ -1,4 +1,4 @@
-# lex-pydantic — composable Validator value
+# lex-schema — composable Validator value
 #
 # Bundles a `ModelSchema` with the pre-computed downstream
 # artifacts so a caller passing the Validator around carries

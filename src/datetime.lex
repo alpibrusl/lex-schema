@@ -1,4 +1,4 @@
-# lex-pydantic — datetime constraints
+# lex-schema — datetime constraints
 #
 # Dates arrive in payloads as ISO 8601 strings
 # (`"2026-05-12T14:30:00Z"`). We parse them via `std.datetime`,

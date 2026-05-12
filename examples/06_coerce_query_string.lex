@@ -1,4 +1,4 @@
-# lex-pydantic — query-string / form coercion
+# lex-schema — query-string / form coercion
 #
 # A query string arrives as `?page=3&per_page=20&debug=true`. Every
 # value is a Str, but we want typed Ints / Bools downstream with

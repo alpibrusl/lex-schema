@@ -1,4 +1,4 @@
-# lex-pydantic — field validators
+# lex-schema — field validators
 #
 # A `check_xxx` function takes an *already-typed* value (Str, Int,
 # Float, Bool, or List), a `path` label for nested error reporting,
@@ -46,6 +46,15 @@ fn str_code(chk :: c.StrCheck) -> Str {
     StrEmail          => e.code_email(),
     StrUrl            => e.code_url(),
     StrUuid           => e.code_pattern(),
+    StrIPv4           => e.code_pattern(),
+    StrIPv6           => e.code_pattern(),
+    StrHostname       => e.code_pattern(),
+    StrIsoDate        => e.code_pattern(),
+    StrIsoTime        => e.code_pattern(),
+    StrBase64         => e.code_pattern(),
+    StrHex            => e.code_pattern(),
+    StrPhoneE164      => e.code_pattern(),
+    StrCreditCardLuhn => e.code_pattern(),
   }
 }
 

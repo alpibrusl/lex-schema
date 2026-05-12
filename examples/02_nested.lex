@@ -1,4 +1,4 @@
-# lex-pydantic — nested records
+# lex-schema — nested records
 #
 # A user with a nested address. The library composes naturally:
 # write a validator for the inner record, then call it from the

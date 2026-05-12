@@ -1,4 +1,4 @@
-# lex-pydantic — schema introspection + JSON Schema / OpenAPI export
+# lex-schema — schema introspection + JSON Schema / OpenAPI export
 #
 # Pydantic's `Model.schema()` returns a JSON Schema describing the
 # model. We model the same idea as a *value*: a `ModelSchema` carries
@@ -356,6 +356,17 @@ fn str_checks_to_schema(checks :: List[c.StrCheck]) -> List[(Str, jv.Json)] {
         JList(list.map(opts, fn (s :: Str) -> jv.Json { JStr(s) })))]),
       StrStartsWith(p)  => list.concat(acc, [("pattern", JStr(str.concat("^", regex_escape(p))))]),
       StrEndsWith(p)    => list.concat(acc, [("pattern", JStr(str.concat(regex_escape(p), "$")))]),
+      # JSON Schema 2020-12 named formats — most validators understand them.
+      StrIPv4           => list.concat(acc, [("format", JStr("ipv4"))]),
+      StrIPv6           => list.concat(acc, [("format", JStr("ipv6"))]),
+      StrHostname       => list.concat(acc, [("format", JStr("hostname"))]),
+      StrIsoDate        => list.concat(acc, [("format", JStr("date"))]),
+      StrIsoTime        => list.concat(acc, [("format", JStr("time"))]),
+      # No standard JSON Schema format for these — fall back to pattern.
+      StrBase64         => list.concat(acc, [("pattern", JStr("^[A-Za-z0-9+/]+={0,2}$"))]),
+      StrHex            => list.concat(acc, [("pattern", JStr("^[0-9a-fA-F]+$"))]),
+      StrPhoneE164      => list.concat(acc, [("pattern", JStr("^\\+[1-9][0-9]{6,14}$"))]),
+      StrCreditCardLuhn => list.concat(acc, [("pattern", JStr("^[0-9]{13,19}$"))]),
     }
   })
 }

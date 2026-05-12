@@ -1,4 +1,4 @@
-# lex-pydantic — SDK code generation
+# lex-schema — SDK code generation
 #
 # Walk a `ModelSchema` and emit type definitions for downstream
 # languages. The output is plain `Str` text the caller can write
@@ -152,14 +152,23 @@ fn str_hint(checks :: List[c.StrCheck]) -> Str {
 
 fn str_hint_one(chk :: c.StrCheck) -> Option[Str] {
   match chk {
-    StrMinLen(n)   => Some(str.concat("minLength: ", int.to_str(n))),
-    StrMaxLen(n)   => Some(str.concat("maxLength: ", int.to_str(n))),
-    StrPattern(p)  => Some(str.concat("pattern: ", p)),
-    StrEmail       => Some("format: email"),
-    StrUrl         => Some("format: uri"),
-    StrUuid        => Some("format: uuid"),
-    StrNonEmpty    => Some("minLength: 1"),
-    _              => None,
+    StrMinLen(n)      => Some(str.concat("minLength: ", int.to_str(n))),
+    StrMaxLen(n)      => Some(str.concat("maxLength: ", int.to_str(n))),
+    StrPattern(p)     => Some(str.concat("pattern: ", p)),
+    StrEmail          => Some("format: email"),
+    StrUrl            => Some("format: uri"),
+    StrUuid           => Some("format: uuid"),
+    StrIPv4           => Some("format: ipv4"),
+    StrIPv6           => Some("format: ipv6"),
+    StrHostname       => Some("format: hostname"),
+    StrIsoDate        => Some("format: date"),
+    StrIsoTime        => Some("format: time"),
+    StrBase64         => Some("format: base64"),
+    StrHex            => Some("format: hex"),
+    StrPhoneE164      => Some("format: phone-e164"),
+    StrCreditCardLuhn => Some("format: credit-card-luhn"),
+    StrNonEmpty       => Some("minLength: 1"),
+    _                 => None,
   }
 }
 
@@ -446,5 +455,210 @@ fn kind_nested(kind :: s.FieldKind) -> List[s.ModelSchema] {
     KObject(sub)   => list.concat([sub], collect_nested(sub)),
     KArray(elem,_) => kind_nested(elem),
     _              => [],
+  }
+}
+
+# ============================================================
+# Zod (TypeScript runtime validation)
+# ============================================================
+#
+# Emits `import { z } from "zod"; export const User = z.object({...});`.
+# Constraints map directly to Zod's chain syntax — `.min(N)`,
+# `.max(N)`, `.email()`, `.regex(/.../)`, `.enum([...])`.
+# `.parse()` and `.safeParse()` work on the returned schemas
+# unchanged.
+
+fn to_zod(schema :: s.ModelSchema) -> Str {
+  let nested := collect_nested(schema)
+  let head := zod_schema(schema)
+  let rest := list.map(nested, fn (m :: s.ModelSchema) -> Str { zod_schema(m) })
+  let body := str.join(list.concat(rest, [head]), "\n\n")
+  str.concat(zod_header(), str.concat("\n\n", body))
+}
+
+fn zod_header() -> Str { "import { z } from \"zod\";" }
+
+fn zod_schema(schema :: s.ModelSchema) -> Str {
+  let doc := if str.is_empty(schema.description) { "" }
+    else { str.concat("/** ", str.concat(schema.description, " */\n")) }
+  let fields := list.map(schema.fields, fn (field :: s.Field) -> Str {
+    zod_field_line(field)
+  })
+  let body := str.join(fields, ",\n")
+  str.concat(doc, str.concat("export const ",
+    str.concat(schema.title,
+      str.concat(" = z.object({\n",
+        str.concat(body, "\n});")))))
+}
+
+fn zod_field_line(field :: s.Field) -> Str {
+  let ty := zod_type(field.kind)
+  let ty_opt := if field.required { ty }
+    else { str.concat(ty, ".optional()") }
+  str.concat("  ", str.concat(field.name, str.concat(": ", ty_opt)))
+}
+
+fn zod_type(kind :: s.FieldKind) -> Str {
+  match kind {
+    KStr(checks)   => zod_str(checks),
+    KInt(checks)   => zod_int(checks),
+    KFloat(checks) => zod_float(checks),
+    KBool          => "z.boolean()",
+    KArray(elem,shape) => str.concat(str.concat("z.array(", zod_type(elem)), str.concat(")", zod_list_chain(shape))),
+    KObject(sub)   => sub.title,
+  }
+}
+
+fn zod_str(checks :: List[c.StrCheck]) -> Str {
+  let chain := list.fold(checks, "z.string()",
+    fn (acc :: Str, chk :: c.StrCheck) -> Str {
+      str.concat(acc, zod_str_chain(chk))
+    })
+  chain
+}
+
+fn zod_str_chain(chk :: c.StrCheck) -> Str {
+  match chk {
+    StrMinLen(n)      => str.concat(".min(", str.concat(int.to_str(n), ")")),
+    StrMaxLen(n)      => str.concat(".max(", str.concat(int.to_str(n), ")")),
+    StrExactLen(n)    => str.concat(".length(", str.concat(int.to_str(n), ")")),
+    StrNonEmpty       => ".min(1)",
+    StrPattern(p)     => str.concat(".regex(/", str.concat(p, "/)")),
+    StrEmail          => ".email()",
+    StrUrl            => ".url()",
+    StrUuid           => ".uuid()",
+    StrIPv4           => ".ip({ version: \"v4\" })",
+    StrIPv6           => ".ip({ version: \"v6\" })",
+    StrIsoDate        => ".regex(/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/)",
+    StrIsoTime        => ".regex(/^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?$/)",
+    StrBase64         => ".base64()",
+    StrPhoneE164      => ".regex(/^\\+[1-9][0-9]{6,14}$/)",
+    StrOneOf(opts)    => str.concat(".refine(v => [",
+      str.concat(str.join(list.map(opts, fn (s :: Str) -> Str {
+        str.concat("\"", str.concat(s, "\""))
+      }), ", "), "].includes(v))")),
+    _                 => "",
+  }
+}
+
+fn zod_int(checks :: List[c.IntCheck]) -> Str {
+  list.fold(checks, "z.number().int()",
+    fn (acc :: Str, chk :: c.IntCheck) -> Str {
+      str.concat(acc, zod_int_chain(chk))
+    })
+}
+
+fn zod_int_chain(chk :: c.IntCheck) -> Str {
+  match chk {
+    IntMin(n)         => str.concat(".min(", str.concat(int.to_str(n), ")")),
+    IntMax(n)         => str.concat(".max(", str.concat(int.to_str(n), ")")),
+    IntInRange(a, b)  => str.concat(".min(",
+      str.concat(int.to_str(a), str.concat(").max(", str.concat(int.to_str(b), ")")))),
+    IntPositive       => ".positive()",
+    IntNonNegative    => ".nonnegative()",
+    _                 => "",
+  }
+}
+
+fn zod_float(checks :: List[c.FloatCheck]) -> Str {
+  list.fold(checks, "z.number()",
+    fn (acc :: Str, chk :: c.FloatCheck) -> Str {
+      str.concat(acc, zod_float_chain(chk))
+    })
+}
+
+fn zod_float_chain(chk :: c.FloatCheck) -> Str {
+  match chk {
+    FloatMin(x)        => str.concat(".min(", str.concat(float.to_str(x), ")")),
+    FloatMax(x)        => str.concat(".max(", str.concat(float.to_str(x), ")")),
+    FloatPositive      => ".positive()",
+    FloatNonNegative   => ".nonnegative()",
+    FloatFinite        => ".finite()",
+    _                  => "",
+  }
+}
+
+fn zod_list_chain(checks :: List[c.ListCheck]) -> Str {
+  list.fold(checks, "", fn (acc :: Str, chk :: c.ListCheck) -> Str {
+    match chk {
+      ListMinLen(n)   => str.concat(acc, str.concat(".min(", str.concat(int.to_str(n), ")"))),
+      ListMaxLen(n)   => str.concat(acc, str.concat(".max(", str.concat(int.to_str(n), ")"))),
+      ListNonEmpty    => str.concat(acc, ".nonempty()"),
+      _               => acc,
+    }
+  })
+}
+
+# ============================================================
+# Rust struct (with serde::Deserialize)
+# ============================================================
+#
+# Emits a derive-Deserialize struct per `ModelSchema`. Field
+# names are snake-cased on the Rust side; serde's `rename` attr
+# pins the JSON-side name to the original camelCase. Optional
+# fields become `Option<T>` with `#[serde(default)]`. Constraint
+# metadata is left in `///` doc comments — Rust's type system
+# doesn't carry runtime-validation constraints natively, so the
+# downstream typically pairs this with the `validator` crate or
+# a hand-written `impl TryFrom`.
+
+fn to_rust_struct(schema :: s.ModelSchema) -> Str {
+  let nested := collect_nested(schema)
+  let head := rust_struct(schema)
+  let rest := list.map(nested, fn (m :: s.ModelSchema) -> Str { rust_struct(m) })
+  let body := str.join(list.concat(rest, [head]), "\n\n")
+  str.concat(rust_header(), str.concat("\n\n", body))
+}
+
+fn rust_header() -> Str {
+  "use serde::{Deserialize, Serialize};"
+}
+
+fn rust_struct(schema :: s.ModelSchema) -> Str {
+  let doc := if str.is_empty(schema.description) { "" }
+    else { str.concat("/// ", str.concat(schema.description, "\n")) }
+  let fields := list.map(schema.fields, fn (field :: s.Field) -> Str {
+    rust_field_line(field)
+  })
+  str.concat(doc,
+    str.concat("#[derive(Debug, Clone, Serialize, Deserialize)]\npub struct ",
+      str.concat(schema.title,
+        str.concat(" {\n",
+          str.concat(str.join(fields, "\n"), "\n}")))))
+}
+
+fn rust_field_line(field :: s.Field) -> Str {
+  let doc := if str.is_empty(field.description) { "" }
+    else { str.concat("    /// ", str.concat(field.description, "\n")) }
+  let hint := rust_constraint_hint(field.kind)
+  let hint_doc := if str.is_empty(hint) { "" }
+    else { str.concat("    /// constraints: ", str.concat(hint, "\n")) }
+  let ty := rust_type(field.kind)
+  let ty_opt := if field.required { ty } else { str.concat("Option<", str.concat(ty, ">")) }
+  let serde_attr := if field.required { "" } else { "    #[serde(default)]\n" }
+  str.concat(doc,
+    str.concat(hint_doc,
+      str.concat(serde_attr,
+        str.concat("    pub ",
+          str.concat(field.name, str.concat(": ", str.concat(ty_opt, ",")))))))
+}
+
+fn rust_type(kind :: s.FieldKind) -> Str {
+  match kind {
+    KStr(_)        => "String",
+    KInt(_)        => "i64",
+    KFloat(_)      => "f64",
+    KBool          => "bool",
+    KArray(elem,_) => str.concat("Vec<", str.concat(rust_type(elem), ">")),
+    KObject(sub)   => sub.title,
+  }
+}
+
+fn rust_constraint_hint(kind :: s.FieldKind) -> Str {
+  match kind {
+    KStr(checks)   => str_hint(checks),
+    KInt(checks)   => int_hint(checks),
+    KFloat(checks) => float_hint(checks),
+    _              => "",
   }
 }

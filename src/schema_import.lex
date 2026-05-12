@@ -1,4 +1,4 @@
-# lex-pydantic — JSON Schema → ModelSchema
+# lex-schema — JSON Schema → ModelSchema
 #
 # Reads a JSON Schema document (Draft 2020-12 shape, the same form
 # `schema.to_json_schema` emits) and produces a `ModelSchema`.

@@ -1,4 +1,4 @@
-# lex-pydantic — first-class JSON ADT + parser
+# lex-schema — first-class JSON ADT + parser
 #
 # A hand-rolled JSON parser that produces a structurally-tagged
 # `Json` ADT — closing the runtime-safety gap that polymorphic

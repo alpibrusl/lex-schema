@@ -1,4 +1,4 @@
-# lex-pydantic — property-based test harness
+# lex-schema — property-based test harness
 #
 # Generate random valid inputs from a `ModelSchema`, then assert
 # a property over them. The canonical use is the **round-trip

@@ -1,10 +1,14 @@
-# lex-pydantic
+# lex-schema
 
-A pydantic-style **runtime validation library** for [lex-lang](https://github.com/alpibrusl/lex-lang).
-Written in pure Lex — no Rust shims, no host hooks, no native code. It
-runs on stock `lex run` / `lex check` and uses only the existing
-stdlib (`std.str`, `std.list`, `std.regex`, `std.json`, `std.datetime`,
-`std.random`, `std.crypto`, `std.cli`, ...).
+A **runtime validation library** for [lex-lang](https://github.com/alpibrusl/lex-lang),
+inspired by [pydantic](https://docs.pydantic.dev/)'s constraint
+catalog + multi-error accumulation semantics but designed
+ground-up for Lex's effect system, variant ADTs, and codegen
+pipelines. Written in pure Lex — no Rust shims, no host hooks,
+no native code. Runs on stock `lex run` / `lex check` and uses
+only the existing stdlib (`std.str`, `std.list`, `std.regex`,
+`std.json`, `std.datetime`, `std.random`, `std.crypto`,
+`std.cli`, ...).
 
 ## Two paths to validation
 
@@ -119,7 +123,7 @@ config files, env vars. The type system can't tell you a string
 carrying a JSON body has a 5-digit zip; that an `Int` parsed from
 a request body is between 13 and 130; that a list of items isn't
 empty. These are **runtime invariants** the type system deliberately
-doesn't model. lex-pydantic covers the gap with:
+doesn't model. lex-schema covers the gap with:
 
 - **Rich constraint catalog.** `StrMinLen`, `StrMaxLen`, `StrPattern`,
   `StrEmail`, `StrUrl`, `StrUuid`, `StrOneOf`, `IntInRange`,
@@ -201,6 +205,8 @@ zero workarounds in source.
 | `src/property.lex`      | Schema-driven sample generation + round-trip property check | ~310 |
 | `src/validator.lex`     | `Validator` bundle (schema + pre-computed exports + validate) | ~70 |
 | `src/fuzz.lex`          | Malformed-input fuzz driver — every category surfaces as `Err` | ~140 |
+| `src/problem.lex`       | RFC 7807 `problem+json` renderer (presets + serialization) | ~120 |
+| `src/migrate.lex`       | Schema migrations (`Transform` ADT) + backward-compat check | ~320 |
 
 ## Install
 
@@ -208,11 +214,11 @@ The library has no dependencies beyond lex-lang's standard library.
 Drop the `src/` directory next to your code and import what you need:
 
 ```lex
-import "./lex-pydantic/src/error"       as e
-import "./lex-pydantic/src/constraints" as c
-import "./lex-pydantic/src/field"       as f
-import "./lex-pydantic/src/combine"     as cm
-import "./lex-pydantic/src/parse"       as p
+import "./lex-schema/src/error"       as e
+import "./lex-schema/src/constraints" as c
+import "./lex-schema/src/field"       as f
+import "./lex-schema/src/combine"     as cm
+import "./lex-schema/src/parse"       as p
 # … plus json_value / schema / validator / etc. as needed.
 ```
 

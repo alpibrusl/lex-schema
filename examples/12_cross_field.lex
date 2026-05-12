@@ -1,4 +1,4 @@
-# lex-pydantic — cross-field validators
+# lex-schema — cross-field validators
 #
 # Per-field checks catch values that are individually invalid;
 # cross-field checks catch combinations that are individually

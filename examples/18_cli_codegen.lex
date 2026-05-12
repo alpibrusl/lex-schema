@@ -1,4 +1,4 @@
-# lex-pydantic — command-line codegen
+# lex-schema — command-line codegen
 #
 # Read a JSON Schema file from disk, build a `Validator`, emit
 # downstream artifacts to stdout. Acts as a thin shim so the

@@ -1,4 +1,4 @@
-# lex-pydantic — webhook deduplication
+# lex-schema — webhook deduplication
 #
 # Webhook delivery from Stripe / GitHub / Slack / etc. is
 # at-least-once: the same event can arrive twice if the first

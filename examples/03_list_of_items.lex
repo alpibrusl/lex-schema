@@ -1,4 +1,4 @@
-# lex-pydantic — list-of-records validation
+# lex-schema — list-of-records validation
 #
 # A purchase order with a list of line items. Each item is its own
 # validated record; the parent list gets shape constraints (at least
