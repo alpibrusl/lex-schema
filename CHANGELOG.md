@@ -2,6 +2,36 @@
 
 All notable changes to lex-schema are tracked here.
 
+## [Unreleased] — 0.9.2 integration
+
+### Added
+
+- `src/hashing.lex` — password hashing and verification backed by the
+  KDF primitives added in lex-lang 0.9.2.
+  - `argon2id_hash(password)` / `argon2id_verify(stored, candidate)` —
+    Argon2id with OWASP-recommended defaults (64 MiB, t=3, p=4) and a
+    fresh 16-byte random salt embedded in the `salt$hash` token.
+  - `pbkdf2_hash(password)` / `pbkdf2_verify(stored, candidate)` —
+    PBKDF2-SHA256 with 600 000 iterations (NIST SP 800-132 2023) and
+    the same `salt$hash` wire format.
+  - `hash(algo, password)` / `verify(algo, stored, candidate)` — generic
+    `HashAlgo` selector (`Argon2id | Pbkdf2Sha256`) so callers can swap
+    algorithms without changing call sites during a migration.
+  - `derive_key(master, salt, info)` — HKDF-SHA256 subkey derivation for
+    non-password use cases (signing keys, encryption keys from one root).
+  - All hashing functions carry the `[crypto]` effect; verification and
+    key derivation are pure (they re-derive deterministically from the
+    stored salt).
+- `tests/test_hashing.lex` — 11 cases covering argon2id / pbkdf2
+  round-trips, wrong-password rejection, two hashes differing (random
+  salt), malformed token errors, generic interface, and HKDF
+  determinism / info-sensitivity.
+
+### Verified against
+
+- `lex 0.9.2`.
+- All existing test suites: 0 regressions.
+
 ## [Unreleased] — 0.8.2
 
 ### Added
