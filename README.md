@@ -486,7 +486,20 @@ v.export_openapi_str(val)            -> Str
 v.export_typescript(val)             -> Str
 v.export_python(val)                 -> Str
 v.summary(val)                       -> Str   # "Validator{title=..., fields=N}"
+
+# Response / output validation (#1 spike) — FastAPI's response_model.
+v.serialize(val, json)        -> Result[Str, Errors]   # default: lossy
+v.serialize_lossy(val, json)  -> Result[Str, Errors]   # silently drop extras
+v.serialize_strict(val, json) -> Result[Str, Errors]   # error on extras
+v.openapi_response(val)       -> Json                  # responses[200] body
 ```
+
+The lossy / strict pair maps directly to pydantic's
+`model_config = {"extra": "ignore" | "forbid"}` and to FastAPI's
+default-lossy `response_model` behaviour. `openapi_response` returns the
+`{ description, content: { application/json: { schema } } }` envelope so
+downstream consumers (e.g. lex-web's OpenAPI exporter) can stash it under
+whatever status key they need.
 
 ### SDK codegen (`sdk`)
 
@@ -612,6 +625,7 @@ exact invocation.
 | `21_form_and_diagram.lex`      | URL-encoded login → `cm.combine3` → typed `LoginFields`; same schema → Mermaid ER + Go struct |
 | `22_multipart_upload.lex`      | Avatar upload: `multipart/form-data` → `decode_multipart` → text fields validated + file metadata extracted |
 | `23_sql_ddl.lex`               | Same `ModelSchema` → `CREATE TABLE` for Postgres and SQLite; nested object → child table + FK |
+| `24_response_model.lex`        | FastAPI `response_model` parity — `serialize_lossy` drops internal fields, `serialize_strict` surfaces them as `unexpected` errors, `openapi_response` emits the OpenAPI 3.1 `responses[200]` envelope |
 
 Run the bad-input demos to see the full error trail:
 
