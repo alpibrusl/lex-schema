@@ -625,6 +625,7 @@ exact invocation.
 | `21_form_and_diagram.lex`      | URL-encoded login → `cm.combine3` → typed `LoginFields`; same schema → Mermaid ER + Go struct |
 | `22_multipart_upload.lex`      | Avatar upload: `multipart/form-data` → `decode_multipart` → text fields validated + file metadata extracted |
 | `23_sql_ddl.lex`               | Same `ModelSchema` → `CREATE TABLE` for Postgres and SQLite; nested object → child table + FK |
+| `24_response_model.lex`        | FastAPI `response_model` parity — `serialize_lossy` drops internal fields, `serialize_strict` surfaces them as `unexpected` errors, `openapi_response` emits the OpenAPI 3.1 `responses[200]` envelope |
 
 Run the bad-input demos to see the full error trail:
 
