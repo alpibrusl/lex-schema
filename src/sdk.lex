@@ -536,7 +536,7 @@ fn zod_str_chain(chk :: c.StrCheck) -> Str {
     StrOneOf(opts)    => str.concat(".refine(v => [",
       str.concat(str.join(list.map(opts, fn (s :: Str) -> Str {
         str.concat("\"", str.concat(s, "\""))
-      }), ", "), "].includes(v))))),
+      }), ", "), "].includes(v))")),
     _                 => "",
   }
 }
