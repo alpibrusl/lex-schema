@@ -95,12 +95,7 @@ fn required_object(name :: Str, sub :: ModelSchema) -> Field {
 
 # Mark a field optional. Idiomatic chaining:
 #   optional(required_str("nickname", [StrMaxLen(40)]))
-fn optional(field :: Field) -> Field
-  examples {
-    optional(required_str("x", [])) =>
-      { name: "x", required: false, description: "", kind: KStr([]) },
-  }
-{
+fn optional(field :: Field) -> Field {
   {
     name: field.name,
     required: false,
@@ -449,22 +444,12 @@ fn escape_meta(c :: Str) -> Str {
   }
 }
 
-fn join_path(prefix :: Str, leaf :: Str) -> Str
-  examples {
-    join_path("user", "email") => "user.email",
-    join_path("", "name") => "name",
-  }
-{
+fn join_path(prefix :: Str, leaf :: Str) -> Str {
   if str.is_empty(prefix) { leaf }
   else { str.concat(prefix, str.concat(".", leaf)) }
 }
 
-fn elem_path(prefix :: Str, idx :: Int) -> Str
-  examples {
-    elem_path("items", 3) => "items[3]",
-    elem_path("tags", 0) => "tags[0]",
-  }
-{
+fn elem_path(prefix :: Str, idx :: Int) -> Str {
   str.concat(prefix, str.concat("[", str.concat(int.to_str(idx), "]")))
 }
 
