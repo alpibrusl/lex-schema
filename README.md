@@ -486,7 +486,20 @@ v.export_openapi_str(val)            -> Str
 v.export_typescript(val)             -> Str
 v.export_python(val)                 -> Str
 v.summary(val)                       -> Str   # "Validator{title=..., fields=N}"
+
+# Response / output validation (#1 spike) — FastAPI's response_model.
+v.serialize(val, json)        -> Result[Str, Errors]   # default: lossy
+v.serialize_lossy(val, json)  -> Result[Str, Errors]   # silently drop extras
+v.serialize_strict(val, json) -> Result[Str, Errors]   # error on extras
+v.openapi_response(val)       -> Json                  # responses[200] body
 ```
+
+The lossy / strict pair maps directly to pydantic's
+`model_config = {"extra": "ignore" | "forbid"}` and to FastAPI's
+default-lossy `response_model` behaviour. `openapi_response` returns the
+`{ description, content: { application/json: { schema } } }` envelope so
+downstream consumers (e.g. lex-web's OpenAPI exporter) can stash it under
+whatever status key they need.
 
 ### SDK codegen (`sdk`)
 

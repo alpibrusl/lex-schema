@@ -63,6 +63,107 @@ fn export_openapi_str(v :: Validator)    -> Str { jv.stringify_pretty(v.openapi)
 fn export_typescript(v :: Validator)     -> Str { v.typescript }
 fn export_python(v :: Validator)         -> Str { v.python }
 
+# ---- Response / output validation --------------------------------
+#
+# Spike for [#1](https://github.com/alpibrusl/lex-schema/issues/1).
+# FastAPI's `response_model=` parameter does three things lex-schema
+# can now do too:
+#
+#   1. Re-validate the handler's return value before it leaves the
+#      process — `serialize_strict` errors on extras, catching drift
+#      between database shape and API contract.
+#   2. Strip extra fields so internal-only attributes don't leak —
+#      `serialize_lossy` (the default for `serialize`).
+#   3. Drive OpenAPI's `responses[200].content.application/json.schema`
+#      from the same schema — `openapi_response`.
+#
+# The validation half rides on the existing `s.validate`, which
+# already builds the result from the *schema's* declared fields,
+# silently dropping extras. `serialize_strict` adds an explicit
+# pre-pass that surfaces those drops as `code = "unexpected"` errors
+# instead.
+
+# Default: validate, drop extras, stringify. Pydantic + FastAPI
+# both lossy by default.
+fn serialize(v :: Validator, value :: jv.Json) -> Result[Str, e.Errors] {
+  serialize_lossy(v, value)
+}
+
+# Validate against the schema, drop fields not declared, stringify.
+# `Err` for type / constraint failures; never for "extra field".
+fn serialize_lossy(v :: Validator, value :: jv.Json) -> Result[Str, e.Errors] {
+  match s.validate(v.schema, value) {
+    Err(es)   => Err(es),
+    Ok(clean) => Ok(jv.stringify(clean)),
+  }
+}
+
+# Validate against the schema; any field not declared on the schema
+# surfaces as `code = "unexpected"`. Use when the output side must
+# guarantee no internal-only fields leak — server-side contract bug
+# catcher.
+fn serialize_strict(v :: Validator, value :: jv.Json) -> Result[Str, e.Errors] {
+  match check_no_extras(v.schema, value) {
+    Err(es) => Err(es),
+    Ok(_)   =>
+      match s.validate(v.schema, value) {
+        Err(es)   => Err(es),
+        Ok(clean) => Ok(jv.stringify(clean)),
+      },
+  }
+}
+
+# Returns the OpenAPI 3.1 response object that drops straight into
+#   responses[<status>] = openapi_response(validator)
+#
+# The schema body is `v.openapi` (the same one used for request
+# bodies); this wraps it in the response envelope so lex-web (and
+# any other OpenAPI consumer) can just stash it under the status
+# key it wants.
+fn openapi_response(v :: Validator) -> jv.Json {
+  let title := v.schema.title
+  let desc := if str.is_empty(title) { "Successful Response" }
+              else { str.concat(title, " response") }
+  JObj([
+    ("description", JStr(desc)),
+    ("content", JObj([
+      ("application/json", JObj([
+        ("schema", v.openapi),
+      ])),
+    ])),
+  ])
+}
+
+# Walk the input's JObj entries; any key not present in the schema's
+# declared field list becomes an `unexpected` error. Non-object
+# inputs surface as a single `type` error so callers don't have to
+# special-case them.
+fn check_no_extras(
+  schema :: s.ModelSchema,
+  j      :: jv.Json
+) -> Result[Unit, e.Errors] {
+  match j {
+    JObj(entries) => {
+      let declared := list.map(schema.fields,
+        fn (f :: s.Field) -> Str { f.name })
+      let extras := list.fold(entries, [],
+        fn (acc :: List[Str], kv :: (Str, jv.Json)) -> List[Str] {
+          let key := match kv { (k, _) => k }
+          let known := list.fold(declared, false,
+            fn (found :: Bool, d :: Str) -> Bool { found or (d == key) })
+          if known { acc } else { list.concat(acc, [key]) }
+        })
+      match list.len(extras) {
+        0 => Ok(()),
+        _ => Err(list.map(extras, fn (k :: Str) -> e.Error {
+               e.error(k, "unexpected", str.concat("unexpected field: ", k))
+             })),
+      }
+    },
+    _ => Err(e.single("", "type", "expected object for serialization")),
+  }
+}
+
 # A compact "what's in this Validator" descriptor — useful for
 # `/v1/schemas` directory listings and for asserting in tests.
 fn summary(v :: Validator) -> Str {
