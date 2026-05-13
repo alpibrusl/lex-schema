@@ -145,7 +145,13 @@ fn build_openapi_response(openapi_schema :: jv.Json) -> jv.Json {
   ])
 }
 
-fn is_known_field(names :: List[Str], key :: Str) -> Bool {
+fn is_known_field(names :: List[Str], key :: Str) -> Bool
+  examples {
+    is_known_field(["name", "age"], "name") => true,
+    is_known_field(["name", "age"], "role") => false,
+    is_known_field([], "x") => false,
+  }
+{
   list.fold(names, false,
     fn (acc :: Bool, name :: Str) -> Bool { acc or (name == key) })
 }
@@ -155,5 +161,16 @@ fn is_known_field(names :: List[Str], key :: Str) -> Bool {
 import "std.str" as str
 import "std.int" as int
 
-fn str_concat(a :: Str, b :: Str) -> Str { str.concat(a, b) }
-fn int_to_str(n :: Int) -> Str { int.to_str(n) }
+fn str_concat(a :: Str, b :: Str) -> Str
+  examples {
+    str_concat("foo", "bar") => "foobar",
+    str_concat("", "x") => "x",
+  }
+{ str.concat(a, b) }
+
+fn int_to_str(n :: Int) -> Str
+  examples {
+    int_to_str(0) => "0",
+    int_to_str(42) => "42",
+  }
+{ int.to_str(n) }
