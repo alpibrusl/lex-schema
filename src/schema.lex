@@ -95,7 +95,12 @@ fn required_object(name :: Str, sub :: ModelSchema) -> Field {
 
 # Mark a field optional. Idiomatic chaining:
 #   optional(required_str("nickname", [StrMaxLen(40)]))
-fn optional(field :: Field) -> Field {
+fn optional(field :: Field) -> Field
+  examples {
+    optional(required_str("x", [])) =>
+      { name: "x", required: false, description: "", kind: KStr([]) },
+  }
+{
   {
     name: field.name,
     required: false,
@@ -364,7 +369,7 @@ fn str_checks_to_schema(checks :: List[c.StrCheck]) -> List[(Str, jv.Json)] {
       StrIsoTime        => list.concat(acc, [("format", JStr("time"))]),
       # No standard JSON Schema format for these — fall back to pattern.
       StrBase64         => list.concat(acc, [("pattern", JStr("^[A-Za-z0-9+/]+={0,2}$"))]),
-      StrHex            => list.concat(acc, [("pattern", JStr("^[0-9a-fA-F]+$"))]),
+      StrHex            => list.concat(acc, [("format", JStr("^[0-9a-fA-F]+$"))]),
       StrPhoneE164      => list.concat(acc, [("pattern", JStr("^\\+[1-9][0-9]{6,14}$"))]),
       StrCreditCardLuhn => list.concat(acc, [("pattern", JStr("^[0-9]{13,19}$"))]),
     }
@@ -444,12 +449,22 @@ fn escape_meta(c :: Str) -> Str {
   }
 }
 
-fn join_path(prefix :: Str, leaf :: Str) -> Str {
+fn join_path(prefix :: Str, leaf :: Str) -> Str
+  examples {
+    join_path("user", "email") => "user.email",
+    join_path("", "name") => "name",
+  }
+{
   if str.is_empty(prefix) { leaf }
   else { str.concat(prefix, str.concat(".", leaf)) }
 }
 
-fn elem_path(prefix :: Str, idx :: Int) -> Str {
+fn elem_path(prefix :: Str, idx :: Int) -> Str
+  examples {
+    elem_path("items", 3) => "items[3]",
+    elem_path("tags", 0) => "tags[0]",
+  }
+{
   str.concat(prefix, str.concat("[", str.concat(int.to_str(idx), "]")))
 }
 
