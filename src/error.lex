@@ -48,6 +48,7 @@ fn code_email()      -> Str { "email" }
 fn code_url()        -> Str { "url" }
 fn code_custom()     -> Str { "custom" }
 fn code_parse()      -> Str { "parse" }        # outer-shell JSON/TOML/YAML parse failure
+fn code_extra()      -> Str { "extra_field" }  # unexpected field in strict serialize mode
 
 # Construct one error.
 fn error(path :: Str, code :: Str, message :: Str) -> Error {

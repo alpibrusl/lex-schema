@@ -95,7 +95,12 @@ fn required_object(name :: Str, sub :: ModelSchema) -> Field {
 
 # Mark a field optional. Idiomatic chaining:
 #   optional(required_str("nickname", [StrMaxLen(40)]))
-fn optional(field :: Field) -> Field {
+fn optional(field :: Field) -> Field
+  examples {
+    optional(required_str("x", [])) =>
+      { name: "x", required: false, description: "", kind: KStr([]) },
+  }
+{
   {
     name: field.name,
     required: false,
@@ -142,14 +147,14 @@ fn validate_at(
       let errs    := match acc { (_es, errs) => errs }
       match validate_field(path_prefix, field, j) {
         # `None` ⇒ field absent and not required ⇒ skip silently.
-        FieldOk(value) => (list.concat(entries, [(field.name, value)]), errs),
+        FieldOk(value) => (list.cons((field.name, value), entries), errs),
         FieldSkip      => (entries, errs),
         FieldErr(more) => (entries, list.concat(errs, more)),
       }
     })
   let entries := match walked { (es, _) => es }
   let errs    := match walked { (_, e2) => e2 }
-  if e.is_ok(errs) { Ok(JObj(entries)) } else { Err(errs) }
+  if e.is_ok(errs) { Ok(JObj(list.reverse(entries))) } else { Err(errs) }
 }
 
 # Walker accumulator init — a tuple of (entries-so-far, errors-so-far).
@@ -257,7 +262,7 @@ fn validate_array(
       let item_v := match p { (_, b) => b }
       let item_path := elem_path(path, i)
       match validate_kind(item_path, elem, item_v) {
-        FieldOk(v2)  => (list.concat(items, [v2]), errs),
+        FieldOk(v2)  => (list.cons(v2, items), errs),
         FieldSkip    => (items, errs),
         FieldErr(es) => (items, list.concat(errs, es)),
       }
@@ -265,7 +270,7 @@ fn validate_array(
   let items := match walked { (it, _) => it }
   let item_errs := match walked { (_, er) => er }
   let all := list.concat(shape_errs, item_errs)
-  if e.is_ok(all) { FieldOk(JList(items)) } else { FieldErr(all) }
+  if e.is_ok(all) { FieldOk(JList(list.reverse(items))) } else { FieldErr(all) }
 }
 
 fn array_walk_init() -> (List[jv.Json], e.Errors) { ([], []) }
@@ -301,10 +306,10 @@ fn schema_body(schema :: ModelSchema) -> List[(Str, jv.Json)] {
   let props := list.map(schema.fields, fn (field :: Field) -> (Str, jv.Json) {
     (field.name, field_to_schema(field))
   })
-  let required_names := list.fold(schema.fields, [],
+  let required_names := list.reverse(list.fold(schema.fields, [],
     fn (acc :: List[jv.Json], field :: Field) -> List[jv.Json] {
-      if field.required { list.concat(acc, [JStr(field.name)]) } else { acc }
-    })
+      if field.required { list.cons(JStr(field.name), acc) } else { acc }
+    }))
   [
     ("type",       JStr("object")),
     ("properties", JObj(props)),
@@ -444,12 +449,22 @@ fn escape_meta(c :: Str) -> Str {
   }
 }
 
-fn join_path(prefix :: Str, leaf :: Str) -> Str {
+fn join_path(prefix :: Str, leaf :: Str) -> Str
+  examples {
+    join_path("user", "email") => "user.email",
+    join_path("", "name") => "name",
+  }
+{
   if str.is_empty(prefix) { leaf }
   else { str.concat(prefix, str.concat(".", leaf)) }
 }
 
-fn elem_path(prefix :: Str, idx :: Int) -> Str {
+fn elem_path(prefix :: Str, idx :: Int) -> Str
+  examples {
+    elem_path("items", 3) => "items[3]",
+    elem_path("tags", 0) => "tags[0]",
+  }
+{
   str.concat(prefix, str.concat("[", str.concat(int.to_str(idx), "]")))
 }
 

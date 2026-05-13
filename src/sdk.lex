@@ -140,13 +140,13 @@ fn ts_constraint_hint(kind :: s.FieldKind) -> Str {
 }
 
 fn str_hint(checks :: List[c.StrCheck]) -> Str {
-  let parts := list.fold(checks, [],
+  let parts := list.reverse(list.fold(checks, [],
     fn (acc :: List[Str], chk :: c.StrCheck) -> List[Str] {
       match str_hint_one(chk) {
-        Some(s) => list.concat(acc, [s]),
+        Some(s) => list.cons(s, acc),
         None    => acc,
       }
-    })
+    }))
   str.join(parts, ", ")
 }
 
@@ -173,13 +173,13 @@ fn str_hint_one(chk :: c.StrCheck) -> Option[Str] {
 }
 
 fn int_hint(checks :: List[c.IntCheck]) -> Str {
-  let parts := list.fold(checks, [],
+  let parts := list.reverse(list.fold(checks, [],
     fn (acc :: List[Str], chk :: c.IntCheck) -> List[Str] {
       match int_hint_one(chk) {
-        Some(s) => list.concat(acc, [s]),
+        Some(s) => list.cons(s, acc),
         None    => acc,
       }
-    })
+    }))
   str.join(parts, ", ")
 }
 
@@ -196,13 +196,13 @@ fn int_hint_one(chk :: c.IntCheck) -> Option[Str] {
 }
 
 fn float_hint(checks :: List[c.FloatCheck]) -> Str {
-  let parts := list.fold(checks, [],
+  let parts := list.reverse(list.fold(checks, [],
     fn (acc :: List[Str], chk :: c.FloatCheck) -> List[Str] {
       match float_hint_one(chk) {
-        Some(s) => list.concat(acc, [s]),
+        Some(s) => list.cons(s, acc),
         None    => acc,
       }
-    })
+    }))
   str.join(parts, ", ")
 }
 
@@ -290,7 +290,7 @@ fn py_type(kind :: s.FieldKind) -> Str {
     },
     KFloat(_)      => "float",
     KBool          => "bool",
-    KArray(elem,_) => str.concat("List[", str.concat(py_type(elem), "]")),
+    KArray(elem,_) => str.concat("List[", str.concat(py_type(elem), "]"),),
     KObject(sub)   => sub.title,
   }
 }
@@ -341,21 +341,21 @@ fn py_field_args(field :: s.Field) -> Str {
     else {
       str.concat("description=\"", str.concat(field.description, "\""))
     }
-  let parts := list.fold([kind_args, desc_arg], [],
+  let parts := list.reverse(list.fold([kind_args, desc_arg], [],
     fn (acc :: List[Str], part :: Str) -> List[Str] {
-      if str.is_empty(part) { acc } else { list.concat(acc, [part]) }
-    })
+      if str.is_empty(part) { acc } else { list.cons(part, acc) }
+    }))
   str.join(parts, ", ")
 }
 
 fn py_str_args(checks :: List[c.StrCheck]) -> Str {
-  let parts := list.fold(checks, [],
+  let parts := list.reverse(list.fold(checks, [],
     fn (acc :: List[Str], chk :: c.StrCheck) -> List[Str] {
       match py_str_arg_one(chk) {
-        Some(s) => list.concat(acc, [s]),
+        Some(s) => list.cons(s, acc),
         None    => acc,
       }
-    })
+    }))
   str.join(parts, ", ")
 }
 
@@ -370,13 +370,13 @@ fn py_str_arg_one(chk :: c.StrCheck) -> Option[Str] {
 }
 
 fn py_int_args(checks :: List[c.IntCheck]) -> Str {
-  let parts := list.fold(checks, [],
+  let parts := list.reverse(list.fold(checks, [],
     fn (acc :: List[Str], chk :: c.IntCheck) -> List[Str] {
       match py_int_arg_one(chk) {
-        Some(s) => list.concat(acc, [s]),
+        Some(s) => list.cons(s, acc),
         None    => acc,
       }
-    })
+    }))
   str.join(parts, ", ")
 }
 
@@ -393,13 +393,13 @@ fn py_int_arg_one(chk :: c.IntCheck) -> Option[Str] {
 }
 
 fn py_float_args(checks :: List[c.FloatCheck]) -> Str {
-  let parts := list.fold(checks, [],
+  let parts := list.reverse(list.fold(checks, [],
     fn (acc :: List[Str], chk :: c.FloatCheck) -> List[Str] {
       match py_float_arg_one(chk) {
-        Some(s) => list.concat(acc, [s]),
+        Some(s) => list.cons(s, acc),
         None    => acc,
       }
-    })
+    }))
   str.join(parts, ", ")
 }
 
@@ -416,13 +416,13 @@ fn py_float_arg_one(chk :: c.FloatCheck) -> Option[Str] {
 }
 
 fn py_list_args(checks :: List[c.ListCheck]) -> Str {
-  let parts := list.fold(checks, [],
+  let parts := list.reverse(list.fold(checks, [],
     fn (acc :: List[Str], chk :: c.ListCheck) -> List[Str] {
       match py_list_arg_one(chk) {
-        Some(s) => list.concat(acc, [s]),
+        Some(s) => list.cons(s, acc),
         None    => acc,
       }
-    })
+    }))
   str.join(parts, ", ")
 }
 
@@ -536,7 +536,7 @@ fn zod_str_chain(chk :: c.StrCheck) -> Str {
     StrOneOf(opts)    => str.concat(".refine(v => [",
       str.concat(str.join(list.map(opts, fn (s :: Str) -> Str {
         str.concat("\"", str.concat(s, "\""))
-      }), ", "), "].includes(v))")),
+      }), ", "), "].includes(v))))),
     _                 => "",
   }
 }
@@ -928,13 +928,13 @@ fn str_checks_sql(
   checks :: List[c.StrCheck],
   dialect :: SqlDialect
 ) -> List[Str] {
-  list.fold(checks, [],
+  list.reverse(list.fold(checks, [],
     fn (acc :: List[Str], chk :: c.StrCheck) -> List[Str] {
       match str_check_sql(col, chk, dialect) {
-        Some(s) => list.concat(acc, [s]),
+        Some(s) => list.cons(s, acc),
         None    => acc,
       }
-    })
+    }))
 }
 
 fn str_check_sql(
@@ -997,13 +997,13 @@ fn in_list_int(opts :: List[Int]) -> Str {
 }
 
 fn int_checks_sql(col :: Str, checks :: List[c.IntCheck]) -> List[Str] {
-  list.fold(checks, [],
+  list.reverse(list.fold(checks, [],
     fn (acc :: List[Str], chk :: c.IntCheck) -> List[Str] {
       match int_check_sql(col, chk) {
-        Some(s) => list.concat(acc, [s]),
+        Some(s) => list.cons(s, acc),
         None    => acc,
       }
-    })
+    }))
 }
 
 fn int_check_sql(col :: Str, chk :: c.IntCheck) -> Option[Str] {
@@ -1028,13 +1028,13 @@ fn int_op_expr(col :: Str, op :: Str, n :: Int) -> Str {
 }
 
 fn float_checks_sql(col :: Str, checks :: List[c.FloatCheck]) -> List[Str] {
-  list.fold(checks, [],
+  list.reverse(list.fold(checks, [],
     fn (acc :: List[Str], chk :: c.FloatCheck) -> List[Str] {
       match float_check_sql(col, chk) {
-        Some(s) => list.concat(acc, [s]),
+        Some(s) => list.cons(s, acc),
         None    => acc,
       }
-    })
+    }))
 }
 
 fn float_check_sql(col :: Str, chk :: c.FloatCheck) -> Option[Str] {
