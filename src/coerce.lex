@@ -19,6 +19,7 @@ import "std.str"   as str
 import "std.int"   as int
 import "std.float" as float
 import "std.list"  as list
+import "std.map"   as map
 
 import "./constraints" as c
 import "./error"       as e
@@ -116,8 +117,6 @@ fn is_falsy_word(s :: Str) -> Bool {
 # query string or form body), then runs the typed validator. Absent
 # keys are reported as `code = "missing"`; bad coercion as
 # `code = "type"`; constraint failures with their per-rule codes.
-
-import "std.map" as map
 
 fn require_int_from_map(
   src :: Map[Str, Str],
