@@ -47,36 +47,31 @@ fn bad_age_json() -> jv.Json {
 }
 
 # ---- serialize_lossy ---------------------------------------------
+# serialize_lossy returns Str directly. Extras are dropped and on a
+# validation failure the output is "{}" — see src/validator.lex docs.
 
 fn lossy_strips_extras() -> Result[Unit, Str] {
   let val := v.make(schema())
-  match v.serialize_lossy(val, json_with_extra()) {
-    Err(_)  => Err("expected Ok"),
-    Ok(out) =>
-      if str.contains(out, "alice")
-         and str.contains(out, "30")
-         and not (str.contains(out, "password_hash"))
-         and not (str.contains(out, "INTERNAL")) { Ok(()) }
-      else { Err(str.concat("extras leaked: ", out)) },
-  }
+  let out := v.serialize_lossy(val, json_with_extra())
+  if str.contains(out, "alice")
+     and str.contains(out, "30")
+     and not (str.contains(out, "password_hash"))
+     and not (str.contains(out, "INTERNAL")) { Ok(()) }
+  else { Err(str.concat("extras leaked: ", out)) }
 }
 
 fn lossy_passes_clean_input() -> Result[Unit, Str] {
   let val := v.make(schema())
-  match v.serialize_lossy(val, good_json()) {
-    Ok(out) =>
-      if str.contains(out, "alice") and str.contains(out, "30") { Ok(()) }
-      else { Err(str.concat("payload mangled: ", out)) },
-    Err(_)  => Err("expected Ok"),
-  }
+  let out := v.serialize_lossy(val, good_json())
+  if str.contains(out, "alice") and str.contains(out, "30") { Ok(()) }
+  else { Err(str.concat("payload mangled: ", out)) }
 }
 
-fn lossy_propagates_constraint_failure() -> Result[Unit, Str] {
+fn lossy_returns_empty_on_failure() -> Result[Unit, Str] {
   let val := v.make(schema())
-  match v.serialize_lossy(val, bad_age_json()) {
-    Ok(_)   => Err("should have failed IntInRange"),
-    Err(es) => if list.len(es) >= 1 { Ok(()) } else { Err("no errors emitted") },
-  }
+  let out := v.serialize_lossy(val, bad_age_json())
+  if out == "{}" { Ok(()) }
+  else { Err(str.concat("expected '{}' on failure, got: ", out)) }
 }
 
 # ---- serialize_strict --------------------------------------------
@@ -167,7 +162,7 @@ fn suite() -> List[Result[Unit, Str]] {
   [
     lossy_strips_extras(),
     lossy_passes_clean_input(),
-    lossy_propagates_constraint_failure(),
+    lossy_returns_empty_on_failure(),
     strict_rejects_one_extra(),
     strict_reports_every_extra(),
     strict_passes_clean_input(),

@@ -14,10 +14,12 @@
 #   match field.check_str("password", raw_pw, [StrMinLen(8), StrMaxLen(128)]) {
 #     Err(es) => Err(es),
 #     Ok(pw)  =>
-#       # 2. Hash it — returns [crypto] so keep this at the effectful
-#       #    boundary of your handler (e.g. after parsing the request).
-#       let hash := hashing.argon2id_hash(pw)
-#       store(hash)
+#       # 2. Hash it — requires [random] for salt generation, so keep
+#       #    this at the effectful boundary of your handler.
+#       match hashing.argon2id_hash(pw) {
+#         Err(msg) => Err(msg),
+#         Ok(hash) => store(hash),
+#       }
 #   }
 #
 #   # 3. Verify on login:
@@ -28,10 +30,13 @@
 #   }
 #
 # Effects:
-#   argon2id_hash / pbkdf2_hash / random_salt — [crypto]
-#   argon2id_verify / pbkdf2_verify           — none (pure; hash re-derives)
+#   *_hash       — [random] (random salt generation)
+#   *_verify     — none (pure; re-derives from stored salt)
+#   derive_key   — none
 
 import "std.str"    as str
+import "std.list"   as list
+import "std.bytes"  as bytes
 import "std.crypto" as crypto
 
 # ---- Argon2id ---------------------------------------------------
@@ -43,29 +48,43 @@ fn argon2id_t_cost() -> Int { 3 }
 fn argon2id_p_cost() -> Int { 4 }
 
 # Hash `password` with argon2id using a fresh random salt.
-# Returns an opaque `salt$hash` string suitable for storage.
-fn argon2id_hash(password :: Str) -> [crypto] Str {
+# Returns an opaque `salt$hex_hash` string suitable for storage.
+fn argon2id_hash(password :: Str) -> [random] Result[Str, Str] {
   let salt := crypto.random_str_hex(16)
-  let h    := crypto.argon2id(
-    password, salt,
-    argon2id_m_cost(), argon2id_t_cost(), argon2id_p_cost())
-  str.concat(salt, str.concat("$", h))
+  match crypto.argon2id(
+    bytes.from_str(password), bytes.from_str(salt),
+    argon2id_m_cost(), argon2id_t_cost(), argon2id_p_cost()) {
+    Err(e) => Err(e),
+    Ok(h)  => Ok(str.concat(salt, str.concat("$", crypto.hex_encode(h)))),
+  }
 }
 
 # Verify `candidate` against a stored argon2id token produced by
 # `argon2id_hash`. Returns Ok(true) on match, Ok(false) on mismatch,
 # Err if the stored token is malformed.
 fn argon2id_verify(stored :: Str, candidate :: Str) -> Result[Bool, Str] {
-  match str.find(stored, "$") {
-    None      => Err("malformed argon2id token"),
-    Some(sep) => {
-      let salt     := str.slice(stored, 0, sep)
-      let expected := str.slice(stored, sep + 1, str.len(stored))
-      let actual   := crypto.argon2id(
-        candidate, salt,
-        argon2id_m_cost(), argon2id_t_cost(), argon2id_p_cost())
-      Ok(crypto.eq(actual, expected))
-    },
+  let parts := str.split(stored, "$")
+  if list.len(parts) != 2 {
+    Err("malformed argon2id token")
+  } else {
+    let salt := match list.head(parts) {
+      Some(s) => s,
+      None    => "",
+    }
+    let expected_hex := match list.head(list.tail(parts)) {
+      Some(s) => s,
+      None    => "",
+    }
+    match crypto.argon2id(
+      bytes.from_str(candidate), bytes.from_str(salt),
+      argon2id_m_cost(), argon2id_t_cost(), argon2id_p_cost()) {
+      Err(e)     => Err(e),
+      Ok(actual) =>
+        match crypto.hex_decode(expected_hex) {
+          Err(e)         => Err(e),
+          Ok(expected_b) => Ok(crypto.eq(actual, expected_b)),
+        },
+    }
   }
 }
 
@@ -76,25 +95,41 @@ fn pbkdf2_iters()   -> Int { 600000 }
 fn pbkdf2_key_len() -> Int { 32 }
 
 # Hash `password` with PBKDF2-SHA256 using a fresh random salt.
-# Returns an opaque `salt$hash` string.
-fn pbkdf2_hash(password :: Str) -> [crypto] Str {
+# Returns an opaque `salt$hex_hash` string.
+fn pbkdf2_hash(password :: Str) -> [random] Result[Str, Str] {
   let salt := crypto.random_str_hex(16)
-  let h    := crypto.pbkdf2_sha256(
-    password, salt, pbkdf2_iters(), pbkdf2_key_len())
-  str.concat(salt, str.concat("$", h))
+  match crypto.pbkdf2_sha256(
+    bytes.from_str(password), bytes.from_str(salt),
+    pbkdf2_iters(), pbkdf2_key_len()) {
+    Err(e) => Err(e),
+    Ok(h)  => Ok(str.concat(salt, str.concat("$", crypto.hex_encode(h)))),
+  }
 }
 
 # Verify `candidate` against a stored pbkdf2 token.
 fn pbkdf2_verify(stored :: Str, candidate :: Str) -> Result[Bool, Str] {
-  match str.find(stored, "$") {
-    None      => Err("malformed pbkdf2 token"),
-    Some(sep) => {
-      let salt     := str.slice(stored, 0, sep)
-      let expected := str.slice(stored, sep + 1, str.len(stored))
-      let actual   := crypto.pbkdf2_sha256(
-        candidate, salt, pbkdf2_iters(), pbkdf2_key_len())
-      Ok(crypto.eq(actual, expected))
-    },
+  let parts := str.split(stored, "$")
+  if list.len(parts) != 2 {
+    Err("malformed pbkdf2 token")
+  } else {
+    let salt := match list.head(parts) {
+      Some(s) => s,
+      None    => "",
+    }
+    let expected_hex := match list.head(list.tail(parts)) {
+      Some(s) => s,
+      None    => "",
+    }
+    match crypto.pbkdf2_sha256(
+      bytes.from_str(candidate), bytes.from_str(salt),
+      pbkdf2_iters(), pbkdf2_key_len()) {
+      Err(e)     => Err(e),
+      Ok(actual) =>
+        match crypto.hex_decode(expected_hex) {
+          Err(e)         => Err(e),
+          Ok(expected_b) => Ok(crypto.eq(actual, expected_b)),
+        },
+    }
   }
 }
 
@@ -105,9 +140,9 @@ fn pbkdf2_verify(stored :: Str, candidate :: Str) -> Result[Bool, Str] {
 type HashAlgo = Argon2id | Pbkdf2Sha256
 
 # Hash using the selected algorithm.
-fn hash(algo :: HashAlgo, password :: Str) -> [crypto] Str {
+fn hash(algo :: HashAlgo, password :: Str) -> [random] Result[Str, Str] {
   match algo {
-    Argon2id    => argon2id_hash(password),
+    Argon2id     => argon2id_hash(password),
     Pbkdf2Sha256 => pbkdf2_hash(password),
   }
 }
@@ -115,7 +150,7 @@ fn hash(algo :: HashAlgo, password :: Str) -> [crypto] Str {
 # Verify using the selected algorithm.
 fn verify(algo :: HashAlgo, stored :: Str, candidate :: Str) -> Result[Bool, Str] {
   match algo {
-    Argon2id    => argon2id_verify(stored, candidate),
+    Argon2id     => argon2id_verify(stored, candidate),
     Pbkdf2Sha256 => pbkdf2_verify(stored, candidate),
   }
 }
@@ -125,6 +160,10 @@ fn verify(algo :: HashAlgo, stored :: Str, candidate :: Str) -> Result[Bool, Str
 # Derive a subkey from a master secret using HKDF-SHA256.
 # Use for deriving per-purpose keys (signing, encryption) from one
 # root key — do NOT use for password storage.
-fn derive_key(master :: Str, salt :: Str, info :: Str) -> Str {
-  crypto.hkdf_sha256(master, salt, info, 32)
+fn derive_key(master :: Str, salt :: Str, info :: Str) -> Result[Str, Str] {
+  match crypto.hkdf_sha256(
+    bytes.from_str(master), bytes.from_str(salt), bytes.from_str(info), 32) {
+    Err(e) => Err(e),
+    Ok(k)  => Ok(crypto.hex_encode(k)),
+  }
 }
