@@ -7,6 +7,7 @@ import "../src/error"         as e
 import "../src/json_value"    as jv
 import "../src/schema"        as s
 import "../src/schema_import" as si
+import "../src/constraints"   as c
 
 # ---- Round-trip with an emitted schema ----------------------------
 
@@ -94,8 +95,6 @@ fn parses_email_format() -> Result[Unit, Str] {
     },
   }
 }
-
-import "../src/constraints" as c
 
 # ---- Imported schema validates correctly --------------------------
 

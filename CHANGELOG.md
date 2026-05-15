@@ -2,7 +2,7 @@
 
 All notable changes to lex-schema are tracked here.
 
-## [Unreleased] — 0.9.2 integration
+## [0.9.2] — 2026-05-14
 
 ### Added
 

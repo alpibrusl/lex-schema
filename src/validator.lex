@@ -13,6 +13,8 @@
 #
 # Effects: none.
 
+import "std.str"  as str
+import "std.int"  as int
 import "std.list" as list
 
 import "./error"      as e
@@ -158,9 +160,6 @@ fn is_known_field(names :: List[Str], key :: Str) -> Bool
 
 # Small local helpers — we don't want this module to depend on
 # every `std.*` import its consumers do.
-import "std.str" as str
-import "std.int" as int
-
 fn str_concat(a :: Str, b :: Str) -> Str
   examples {
     str_concat("foo", "bar") => "foobar",

@@ -20,13 +20,11 @@
 
 import "std.str"   as str
 import "std.int"   as int
-import "std.float" as float
 import "std.list"  as list
 
 import "./error"       as e
 import "./constraints" as c
 import "./field"       as f
-import "./combine"     as cm
 import "./json_value"  as jv
 
 # ---- Schema datatypes ---------------------------------------------
@@ -285,9 +283,9 @@ fn to_json_schema(schema :: ModelSchema) -> jv.Json {
     ("$schema", JStr("https://json-schema.org/draft/2020-12/schema")),
     ("title",   JStr(schema.title)),
   ], schema_body(schema))
-  let with_desc := if str.is_empty(schema.description) { entries }
+  let final_entries := if str.is_empty(schema.description) { entries }
     else { list.concat(entries, [("description", JStr(schema.description))]) }
-  JObj(with_desc)
+  JObj(final_entries)
 }
 
 # Same shape but without the `$schema` URI — what an OpenAPI
@@ -296,9 +294,9 @@ fn to_openapi_schema(schema :: ModelSchema) -> jv.Json {
   let entries := list.concat([
     ("title", JStr(schema.title)),
   ], schema_body(schema))
-  let with_desc := if str.is_empty(schema.description) { entries }
+  let final_entries := if str.is_empty(schema.description) { entries }
     else { list.concat(entries, [("description", JStr(schema.description))]) }
-  JObj(with_desc)
+  JObj(final_entries)
 }
 
 # Shared body: type + properties + required.
@@ -424,13 +422,13 @@ fn list_checks_to_schema(checks :: List[c.ListCheck]) -> List[(Str, jv.Json)] {
 # so a literal segment doesn't accidentally land as a regex.
 fn regex_escape(s :: Str) -> Str {
   let chars := str.split(s, "")
-  list.fold(chars, "", fn (acc :: Str, c :: Str) -> Str {
-    str.concat(acc, escape_meta(c))
+  list.fold(chars, "", fn (acc :: Str, ch :: Str) -> Str {
+    str.concat(acc, escape_meta(ch))
   })
 }
 
-fn escape_meta(c :: Str) -> Str {
-  match c {
+fn escape_meta(ch :: Str) -> Str {
+  match ch {
     "."  => "\\.",
     "*"  => "\\*",
     "+"  => "\\+",
@@ -445,7 +443,7 @@ fn escape_meta(c :: Str) -> Str {
     "^"  => "\\^",
     "$"  => "\\$",
     "\\" => "\\\\",
-    _    => c,
+    _    => ch,
   }
 }
 

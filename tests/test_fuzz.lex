@@ -8,6 +8,7 @@
 
 import "std.list" as list
 import "std.str"  as str
+import "std.int"  as int
 
 import "../src/error"   as e
 import "../src/schema"  as s
@@ -22,6 +23,8 @@ fn fixture_schema() -> s.ModelSchema {
     ],
   }
 }
+
+fn int_to_str(n :: Int) -> Str { int.to_str(n) }
 
 fn zero_escapes() -> Result[Unit, Str] {
   match fz.count_escapes(fixture_schema()) {
@@ -66,9 +69,6 @@ fn corpus_non_empty() -> Result[Unit, Str] {
 fn sum_total(acc :: Int, t :: fz.Tally) -> Int { acc + t.total }
 
 # ---- Suite --------------------------------------------------------
-
-import "std.int" as int
-fn int_to_str(n :: Int) -> Str { int.to_str(n) }
 
 fn suite() -> List[Result[Unit, Str]] {
   [

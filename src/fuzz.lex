@@ -25,6 +25,7 @@
 # generation lives in `property.lex`.
 
 import "std.str"  as str
+import "std.int"  as int
 import "std.list" as list
 
 import "./error"      as e
@@ -174,5 +175,4 @@ fn format_tallies(tallies :: List[Tally]) -> Str {
   str.join(lines, "\n")
 }
 
-import "std.int" as int
 fn int_to_str(n :: Int) -> Str { int.to_str(n) }
