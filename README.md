@@ -210,6 +210,7 @@ zero workarounds in source.
 | `src/problem.lex`       | RFC 7807 `problem+json` renderer (presets + serialization) | ~120 |
 | `src/migrate.lex`       | Schema migrations (`Transform` ADT) + backward-compat check | ~320 |
 | `src/form.lex`          | `x-www-form-urlencoded` + `multipart/form-data` decoder + dispatch by Content-Type | ~400 |
+| `src/html.lex`          | HTML entity `escape` for XSS-safe interpolation into HTML body + attribute contexts | ~55 |
 
 ## Install
 
@@ -592,6 +593,25 @@ and quoted boundaries) and flattens both formats to a uniform
 `Map[Str, Str]`, so the same `coerce.require_*_from_map` pipeline
 serves urlencoded and multipart callers. Callers that need file
 metadata go through `decode_multipart` directly.
+
+### HTML escaping (`html`)
+
+```lex
+html.escape(s)   -> Str
+```
+
+Replaces the five OWASP-recommended HTML special characters with
+their HTML5 entities — `&` -> `&amp;`, `<` -> `&lt;`, `>` ->
+`&gt;`, `"` -> `&quot;`, `'` -> `&#39;` (numeric, not `&apos;`,
+to match Go's `html.EscapeString` and stay safe on legacy
+parsers). Use it any time untrusted text is interpolated into an
+HTML body or attribute value. Scope is HTML text + attribute
+contexts only — CSS, JavaScript, and URL contexts have different
+rules; using HTML escapes inside `<script>` / `style=` / `href=`
+payloads is a real XSS bug. Intentionally not idempotent: feeding
+already-escaped HTML in re-escapes the `&` of every entity, which
+is the correct behaviour for the call-site this exists to
+protect.
 
 ## Examples
 
