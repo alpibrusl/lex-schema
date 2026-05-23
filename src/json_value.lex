@@ -67,7 +67,10 @@ fn parse(src :: Str) -> Result[Json, ParseErr] {
 # Parse and surface the failure as an `Errors` list — same shape as
 # the rest of the library, so callers can drop it into `and_then`.
 fn parse_into_errors(src :: Str) -> Result[Json, e.Errors] {
-  match parse(src) {
+  let safe := str.join(list.map(str.split(src, ""), fn (c :: Str) -> Str {
+    if str.len(c) > 1 { "?" } else { c }
+  }), "")
+  match parse(safe) {
     Ok(j)  => Ok(j),
     Err(p) => Err(e.single("", e.code_parse(),
       str.concat(p.message,
