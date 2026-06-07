@@ -37,14 +37,14 @@ import "std.str" as str
 # call.
 fn escape(s :: Str) -> Str
   examples {
-    escape("")                  => "",
-    escape("hello world")       => "hello world",
-    escape("a & b")             => "a &amp; b",
-    escape("<script>")          => "&lt;script&gt;",
-    escape("\"quoted\"")        => "&quot;quoted&quot;",
-    escape("it's")              => "it&#39;s",
-    escape("a<b>c&d\"e'f")      => "a&lt;b&gt;c&amp;d&quot;e&#39;f",
-    escape("&amp;")             => "&amp;amp;",
+    escape("") => "",
+    escape("hello world") => "hello world",
+    escape("a & b") => "a &amp; b",
+    escape("<script>") => "&lt;script&gt;",
+    escape("\"quoted\"") => "&quot;quoted&quot;",
+    escape("it's") => "it&#39;s",
+    escape("a<b>c&d\"e'f") => "a&lt;b&gt;c&amp;d&quot;e&#39;f",
+    escape("&amp;") => "&amp;amp;"
   }
 {
   let s1 := str.replace(s, "&", "&amp;")
@@ -53,3 +53,4 @@ fn escape(s :: Str) -> Str
   let s4 := str.replace(s3, "\"", "&quot;")
   str.replace(s4, "'", "&#39;")
 }
+
