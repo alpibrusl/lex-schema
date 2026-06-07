@@ -5,16 +5,27 @@
 # pin that invariant.
 
 import "std.list" as list
-import "std.str"  as str
-import "std.int"  as int
 
-import "../src/error"   as e
+import "std.str" as str
+
+import "std.int" as int
+
+import "../src/error" as e
+
 import "../src/combine" as cm
 
 # Errors and Results we'll thread through the tests.
-fn err1() -> e.Errors { e.single("a", "type", "bad a") }
-fn err2() -> e.Errors { e.single("b", "type", "bad b") }
-fn err3() -> e.Errors { e.single("c", "type", "bad c") }
+fn err1() -> e.Errors {
+  e.single("a", "type", "bad a")
+}
+
+fn err2() -> e.Errors {
+  e.single("b", "type", "bad b")
+}
+
+fn err3() -> e.Errors {
+  e.single("c", "type", "bad c")
+}
 
 # Builder used by `combine3`.
 fn make_record(a :: Int, b :: Int, c :: Int) -> { a :: Int, b :: Int, c :: Int } {
@@ -22,11 +33,12 @@ fn make_record(a :: Int, b :: Int, c :: Int) -> { a :: Int, b :: Int, c :: Int }
 }
 
 # ---- combine2 -----------------------------------------------------
-
 fn combine2_all_ok() -> Result[Unit, Str] {
-  match cm.combine2(Ok(1), Ok(2), fn (a :: Int, b :: Int) -> Int { a + b }) {
-    Ok(3)  => Ok(()),
-    Ok(n)  => Err(str.concat("expected 3, got ", int.to_str(n))),
+  match cm.combine2(Ok(1), Ok(2), fn (a :: Int, b :: Int) -> Int {
+    a + b
+  }) {
+    Ok(3) => Ok(()),
+    Ok(n) => Err(str.concat("expected 3, got ", int.to_str(n))),
     Err(_) => Err("unexpected Err"),
   }
 }
@@ -34,64 +46,64 @@ fn combine2_all_ok() -> Result[Unit, Str] {
 # Helper that wraps the constructor with an explicit return type
 # so the polymorphic `Result[_, _]` gets pinned at the call site —
 # Lex doesn't have an `(expr :: Type)` ascription form.
-fn err_int(es :: e.Errors) -> Result[Int, e.Errors] { Err(es) }
-fn ok_int(n :: Int)        -> Result[Int, e.Errors] { Ok(n) }
+fn err_int(es :: e.Errors) -> Result[Int, e.Errors] {
+  Err(es)
+}
+
+fn ok_int(n :: Int) -> Result[Int, e.Errors] {
+  Ok(n)
+}
 
 fn combine2_both_err() -> Result[Unit, Str] {
-  match cm.combine2(
-    err_int(err1()),
-    err_int(err2()),
-    fn (a :: Int, b :: Int) -> Int { a + b }
-  ) {
-    Ok(_)    => Err("expected Err"),
-    Err(es)  => if list.len(es) == 2 { Ok(()) } else {
+  match cm.combine2(err_int(err1()), err_int(err2()), fn (a :: Int, b :: Int) -> Int {
+    a + b
+  }) {
+    Ok(_) => Err("expected Err"),
+    Err(es) => if list.len(es) == 2 {
+      Ok(())
+    } else {
       Err(str.concat("expected 2 errors, got len=", int.to_str(list.len(es))))
     },
   }
 }
 
 fn combine2_one_err() -> Result[Unit, Str] {
-  match cm.combine2(
-    ok_int(1),
-    err_int(err2()),
-    fn (a :: Int, b :: Int) -> Int { a + b }
-  ) {
-    Ok(_)    => Err("expected Err"),
-    Err(es)  => if list.len(es) == 1 { Ok(()) } else {
+  match cm.combine2(ok_int(1), err_int(err2()), fn (a :: Int, b :: Int) -> Int {
+    a + b
+  }) {
+    Ok(_) => Err("expected Err"),
+    Err(es) => if list.len(es) == 1 {
+      Ok(())
+    } else {
       Err("expected 1 error")
     },
   }
 }
 
 # ---- combine3 -----------------------------------------------------
-
 fn combine3_all_err_accumulates() -> Result[Unit, Str] {
-  let r := cm.combine3(
-    err_int(err1()),
-    err_int(err2()),
-    err_int(err3()),
-    make_record
-  )
+  let r := cm.combine3(err_int(err1()), err_int(err2()), err_int(err3()), make_record)
   match r {
-    Ok(_)   => Err("expected Err"),
-    Err(es) => if list.len(es) == 3 { Ok(()) } else {
+    Ok(_) => Err("expected Err"),
+    Err(es) => if list.len(es) == 3 {
+      Ok(())
+    } else {
       Err(str.concat("expected 3 errors, got len=", int.to_str(list.len(es))))
     },
   }
 }
 
 fn combine3_paths_preserved() -> Result[Unit, Str] {
-  let r := cm.combine3(
-    err_int(err1()),
-    err_int(err2()),
-    err_int(err3()),
-    make_record
-  )
+  let r := cm.combine3(err_int(err1()), err_int(err2()), err_int(err3()), make_record)
   match r {
-    Ok(_)   => Err("expected Err"),
+    Ok(_) => Err("expected Err"),
     Err(es) => {
-      let paths := list.map(es, fn (er :: e.Error) -> Str { er.path })
-      if joined(paths) == "a,b,c" { Ok(()) } else {
+      let paths := list.map(es, fn (er :: e.Error) -> Str {
+        er.path
+      })
+      if joined(paths) == "a,b,c" {
+        Ok(())
+      } else {
         Err(str.concat("got paths: ", joined(paths)))
       }
     },
@@ -99,74 +111,86 @@ fn combine3_paths_preserved() -> Result[Unit, Str] {
 }
 
 # ---- and_then / or_else -------------------------------------------
-
 fn and_then_chains() -> Result[Unit, Str] {
-  let r := cm.and_then(
-    Ok(5),
-    fn (n :: Int) -> Result[Int, e.Errors] { Ok(n * 2) }
-  )
+  let r := cm.and_then(Ok(5), fn (n :: Int) -> Result[Int, e.Errors] {
+    Ok(n * 2)
+  })
   match r {
     Ok(10) => Ok(()),
-    Ok(n)  => Err(str.concat("expected 10, got ", int.to_str(n))),
+    Ok(n) => Err(str.concat("expected 10, got ", int.to_str(n))),
     Err(_) => Err("expected Ok"),
   }
 }
 
 fn and_then_short_circuits() -> Result[Unit, Str] {
-  let r := cm.and_then(
-    err_int(err1()),
-    fn (n :: Int) -> Result[Int, e.Errors] { Ok(n * 2) }
-  )
+  let r := cm.and_then(err_int(err1()), fn (n :: Int) -> Result[Int, e.Errors] {
+    Ok(n * 2)
+  })
   match r {
-    Ok(_)   => Err("expected Err"),
-    Err(es) => if list.len(es) == 1 { Ok(()) } else { Err("wrong size") },
+    Ok(_) => Err("expected Err"),
+    Err(es) => if list.len(es) == 1 {
+      Ok(())
+    } else {
+      Err("wrong size")
+    },
   }
 }
 
 fn or_else_recovers() -> Result[Unit, Str] {
-  let r := cm.or_else(
-    err_int(err1()),
-    fn (_es :: e.Errors) -> Result[Int, e.Errors] { Ok(0) }
-  )
+  let r := cm.or_else(err_int(err1()), fn (_es :: e.Errors) -> Result[Int, e.Errors] {
+    Ok(0)
+  })
   match r {
-    Ok(0)  => Ok(()),
-    Ok(n)  => Err(str.concat("expected 0, got ", int.to_str(n))),
+    Ok(0) => Ok(()),
+    Ok(n) => Err(str.concat("expected 0, got ", int.to_str(n))),
     Err(_) => Err("expected recovery"),
   }
 }
 
 # ---- traverse -----------------------------------------------------
-
 fn traverse_all_ok() -> Result[Unit, Str] {
-  let r := cm.traverse([1, 2, 3],
-    fn (n :: Int) -> Result[Int, e.Errors] { Ok(n + 1) })
+  let r := cm.traverse([1, 2, 3], fn (n :: Int) -> Result[Int, e.Errors] {
+    Ok(n + 1)
+  })
   match r {
-    Ok(out) => if list.len(out) == 3 { Ok(()) } else { Err("wrong len") },
-    Err(_)  => Err("expected Ok"),
+    Ok(out) => if list.len(out) == 3 {
+      Ok(())
+    } else {
+      Err("wrong len")
+    },
+    Err(_) => Err("expected Ok"),
   }
 }
 
 fn traverse_accumulates() -> Result[Unit, Str] {
-  let r := cm.traverse([1, 2, 3],
-    fn (n :: Int) -> Result[Int, e.Errors] {
-      if n == 2 { Err(e.single("at[1]", "type", "two")) } else { Ok(n) }
-    })
+  let r := cm.traverse([1, 2, 3], fn (n :: Int) -> Result[Int, e.Errors] {
+    if n == 2 {
+      Err(e.single("at[1]", "type", "two"))
+    } else {
+      Ok(n)
+    }
+  })
   match r {
-    Ok(_)   => Err("expected Err"),
-    Err(es) => if list.len(es) == 1 { Ok(()) } else { Err("wrong size") },
+    Ok(_) => Err("expected Err"),
+    Err(es) => if list.len(es) == 1 {
+      Ok(())
+    } else {
+      Err("wrong size")
+    },
   }
 }
 
 # ---- with_path ----------------------------------------------------
-
 fn with_path_prefixes_errors() -> Result[Unit, Str] {
   let inner :: Result[Int, e.Errors] := Err(e.single("zip", "pattern", "bad"))
   let r := cm.with_path("address", inner)
   match r {
-    Ok(_)    => Err("expected Err"),
-    Err(es)  => match list.head(es) {
-      None      => Err("empty"),
-      Some(er)  => if er.path == "address.zip" { Ok(()) } else {
+    Ok(_) => Err("expected Err"),
+    Err(es) => match list.head(es) {
+      None => Err("empty"),
+      Some(er) => if er.path == "address.zip" {
+        Ok(())
+      } else {
         Err(str.concat("wrong path: ", er.path))
       },
     },
@@ -174,30 +198,20 @@ fn with_path_prefixes_errors() -> Result[Unit, Str] {
 }
 
 # ---- Suite --------------------------------------------------------
-
-fn joined(xs :: List[Str]) -> Str { str.join(xs, ",") }
+fn joined(xs :: List[Str]) -> Str {
+  str.join(xs, ",")
+}
 
 fn suite() -> List[Result[Unit, Str]] {
-  [
-    combine2_all_ok(),
-    combine2_both_err(),
-    combine2_one_err(),
-    combine3_all_err_accumulates(),
-    combine3_paths_preserved(),
-    and_then_chains(),
-    and_then_short_circuits(),
-    or_else_recovers(),
-    traverse_all_ok(),
-    traverse_accumulates(),
-    with_path_prefixes_errors(),
-  ]
+  [combine2_all_ok(), combine2_both_err(), combine2_one_err(), combine3_all_err_accumulates(), combine3_paths_preserved(), and_then_chains(), and_then_short_circuits(), or_else_recovers(), traverse_all_ok(), traverse_accumulates(), with_path_prefixes_errors()]
 }
 
 fn run_all() -> Int {
   list.fold(suite(), 0, fn (acc :: Int, v :: Result[Unit, Str]) -> Int {
     match v {
-      Ok(_)  => acc,
+      Ok(_) => acc,
       Err(_) => acc + 1,
     }
   })
 }
+
