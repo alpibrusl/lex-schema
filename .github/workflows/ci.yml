@@ -39,11 +39,8 @@ jobs:
           sudo chmod +x /usr/local/bin/lex
           lex --version
 
-      - name: Format check
-        run: lex fmt --check src/
-
-      - name: Type-check package
-        run: lex check --strict src/
-
-      - name: Test
-        run: lex test
+      # The canonical project loop: fmt --check + check --strict + test
+      # (+ pkg install). Same umbrella `make publish` runs locally, so CI and
+      # the local publish gate stay in lockstep.
+      - name: Validate (lex ci)
+        run: lex ci
