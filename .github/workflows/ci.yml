@@ -18,7 +18,7 @@ on:
 env:
   # Pinned lex toolchain version. Update here when lex-lang ships a new
   # release that lex-schema depends on.
-  LEX_VERSION: "v0.9.8"
+  LEX_VERSION: "v0.9.7"
 
 jobs:
   check:
