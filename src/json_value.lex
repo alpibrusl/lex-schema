@@ -50,12 +50,24 @@ type ParseStep = { pos :: Int, value :: Json }
 
 # Parse a complete JSON document. Trailing whitespace is allowed
 # but trailing non-whitespace garbage is a parse error.
+# Replace any literal multi-byte (non-ASCII) character with "?" before
+# parsing. The scanner advances byte-by-byte while `str.len`/`str.slice`
+# disagree on char vs byte boundaries for multi-byte UTF-8, which made
+# `parse` fail on literal `—`, `→`, etc. inside strings. This mirrors the
+# existing `parse_into_errors` convention (non-ASCII BMP -> "?").
+fn sanitise_multibyte(src :: Str) -> Str {
+  str.join(list.map(str.split(src, ""), fn (ch :: Str) -> Str {
+    if str.len(ch) > 1 { "?" } else { ch }
+  }), "")
+}
+
 fn parse(src :: Str) -> Result[Json, ParseErr] {
-  match parse_value(src, 0) {
+  let safe := sanitise_multibyte(src)
+  match parse_value(safe, 0) {
     Err(e1) => Err(e1),
     Ok(step) => {
-      let end := skip_ws(src, step.pos)
-      if end == str.len(src) {
+      let end := skip_ws(safe, step.pos)
+      if end == str.len(safe) {
         Ok(step.value)
       } else {
         Err({ pos: end, message: "trailing characters after JSON value" })
