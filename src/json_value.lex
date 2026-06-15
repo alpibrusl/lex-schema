@@ -52,7 +52,11 @@ type ParseStep = { pos :: Int, value :: Json }
 # existing `parse_into_errors` convention (non-ASCII BMP -> "?").
 fn sanitise_multibyte(src :: Str) -> Str {
   str.join(list.map(str.split(src, ""), fn (ch :: Str) -> Str {
-    if str.len(ch) > 1 { "?" } else { ch }
+    if str.len(ch) > 1 {
+      "?"
+    } else {
+      ch
+    }
   }), "")
 }
 
