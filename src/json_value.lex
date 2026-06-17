@@ -205,6 +205,60 @@ fn is_digit(c :: Str) -> Bool {
   }
 }
 
+fn hex_to_int(h :: Str) -> Int
+  examples {
+    hex_to_int("0") => 0,
+    hex_to_int("a") => 10,
+    hex_to_int("F") => 15
+  }
+{
+  match h {
+    "0" => 0, "1" => 1, "2" => 2, "3" => 3, "4" => 4,
+    "5" => 5, "6" => 6, "7" => 7, "8" => 8, "9" => 9,
+    "a" => 10, "b" => 11, "c" => 12, "d" => 13, "e" => 14, "f" => 15,
+    "A" => 10, "B" => 11, "C" => 12, "D" => 13, "E" => 14, "F" => 15,
+    _ => 0,
+  }
+}
+
+# Map a Unicode BMP code point to a Lex Str. ASCII 0-126 are returned
+# directly; anything above U+007E becomes "?" — same convention as
+# the multi-byte sanitiser in parse_into_errors.
+fn codepoint_to_ascii_str(cp :: Int) -> Str
+  examples {
+    codepoint_to_ascii_str(60) => "<",
+    codepoint_to_ascii_str(62) => ">",
+    codepoint_to_ascii_str(38) => "&",
+    codepoint_to_ascii_str(32) => " ",
+    codepoint_to_ascii_str(9000) => "?"
+  }
+{
+  match cp {
+    0 => "\0", 9 => "\t", 10 => "\n", 13 => "\r",
+    32 => " ", 33 => "!", 34 => "\"", 35 => "#", 36 => "$",
+    37 => "%", 38 => "&", 39 => "'", 40 => "(", 41 => ")",
+    42 => "*", 43 => "+", 44 => ",", 45 => "-", 46 => ".",
+    47 => "/", 48 => "0", 49 => "1", 50 => "2", 51 => "3",
+    52 => "4", 53 => "5", 54 => "6", 55 => "7", 56 => "8",
+    57 => "9", 58 => ":", 59 => ";", 60 => "<", 61 => "=",
+    62 => ">", 63 => "?", 64 => "@",
+    65 => "A", 66 => "B", 67 => "C", 68 => "D", 69 => "E",
+    70 => "F", 71 => "G", 72 => "H", 73 => "I", 74 => "J",
+    75 => "K", 76 => "L", 77 => "M", 78 => "N", 79 => "O",
+    80 => "P", 81 => "Q", 82 => "R", 83 => "S", 84 => "T",
+    85 => "U", 86 => "V", 87 => "W", 88 => "X", 89 => "Y",
+    90 => "Z", 91 => "[", 92 => "\\", 93 => "]", 94 => "^",
+    95 => "_", 96 => "`",
+    97 => "a", 98 => "b", 99 => "c", 100 => "d", 101 => "e",
+    102 => "f", 103 => "g", 104 => "h", 105 => "i", 106 => "j",
+    107 => "k", 108 => "l", 109 => "m", 110 => "n", 111 => "o",
+    112 => "p", 113 => "q", 114 => "r", 115 => "s", 116 => "t",
+    117 => "u", 118 => "v", 119 => "w", 120 => "x", 121 => "y",
+    122 => "z", 123 => "{", 124 => "|", 125 => "}", 126 => "~",
+    _ => "?",
+  }
+}
+
 # ---- Strings ------------------------------------------------------
 #
 # JSON strings escape `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`,
@@ -274,11 +328,9 @@ fn parse_escape(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
   } else {
     let c := char_at(src, p)
     # Lex's string-literal grammar supports `\n`, `\t`, `\r`, `\\`,
-    # `\"`, `\0` only — so we can't materialize `\b` / `\f` /
-    # `\uXXXX` here without runtime char-code construction. The
-    # full set is rare in real JSON; we accept the common subset
-    # and error on the rest with a clear message so callers can
-    # decide whether to pre-process input or open a bug.
+    # `\"`, `\0`. `\uXXXX` is handled via codepoint_to_ascii_str:
+    # ASCII BMP chars decode correctly; non-ASCII BMP → "?".
+    # `\b` / `\f` are rare in practice; error on those with a clear message.
     match c {
       "\"" => Ok({ pos: p + 1, text: "\"" }),
       "\\" => Ok({ pos: p + 1, text: "\\" }),
@@ -288,7 +340,16 @@ fn parse_escape(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
       "t"  => Ok({ pos: p + 1, text: "\t" }),
       "b"  => Err({ pos: p, message: "`\\b` escape not yet supported" }),
       "f"  => Err({ pos: p, message: "`\\f` escape not yet supported" }),
-      "u"  => Err({ pos: p, message: "`\\uXXXX` escapes not yet supported" }),
+      "u"  => if p + 4 >= str.len(src) {
+        Err({ pos: p, message: "incomplete \\uXXXX escape" })
+      } else {
+        let h1 := char_at(src, p + 1)
+        let h2 := char_at(src, p + 2)
+        let h3 := char_at(src, p + 3)
+        let h4 := char_at(src, p + 4)
+        let cp := hex_to_int(h1) * 4096 + hex_to_int(h2) * 256 + hex_to_int(h3) * 16 + hex_to_int(h4)
+        Ok({ pos: p + 5, text: codepoint_to_ascii_str(cp) })
+      },
       _    => Err({ pos: p, message: str.concat("invalid escape `\\", str.concat(c, "`")) }),
     }
   }
@@ -786,3 +847,6 @@ fn indent_str(depth :: Int) -> Str {
   if depth <= 0 { "" }
   else { str.concat("  ", indent_str(depth - 1)) }
 }
+
+# Alias kept for source compatibility — identical to `stringify`.
+fn encode(j :: Json) -> Str { stringify(j) }
