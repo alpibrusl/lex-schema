@@ -1,5 +1,9 @@
 # lex-schema
 
+[![CI](https://github.com/alpibrusl/lex-schema/actions/workflows/ci.yml/badge.svg)](https://github.com/alpibrusl/lex-schema/actions/workflows/ci.yml)
+
+**Part of the [Lex](https://lexlang.org) project** — Library · [Manifesto](https://lexlang.org/manifesto) · [All packages](https://lexlang.org)
+
 A **runtime validation library** for [lex-lang](https://github.com/alpibrusl/lex-lang),
 inspired by [pydantic](https://docs.pydantic.dev/)'s constraint
 catalog + multi-error accumulation semantics but designed

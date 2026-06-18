@@ -15,7 +15,9 @@
 # Effects: none (the underlying parse builtins are pure).
 
 import "std.json" as json
+
 import "std.toml" as toml
+
 import "std.yaml" as yaml
 
 import "./error" as e
@@ -28,7 +30,7 @@ import "./error" as e
 # behaves like plain `json.parse`.
 fn from_json[T](source :: Str, required :: List[Str]) -> Result[T, e.Errors] {
   match json.parse_strict(source, required) {
-    Ok(v)  => Ok(v),
+    Ok(v) => Ok(v),
     Err(m) => Err(e.single("", e.code_parse(), m)),
   }
 }
@@ -38,7 +40,7 @@ fn from_json[T](source :: Str, required :: List[Str]) -> Result[T, e.Errors] {
 # downstream combinators.
 fn from_toml[T](source :: Str, required :: List[Str]) -> Result[T, e.Errors] {
   match toml.parse_strict(source, required) {
-    Ok(v)  => Ok(v),
+    Ok(v) => Ok(v),
     Err(m) => Err(e.single("", e.code_parse(), m)),
   }
 }
@@ -46,7 +48,8 @@ fn from_toml[T](source :: Str, required :: List[Str]) -> Result[T, e.Errors] {
 # YAML mirror.
 fn from_yaml[T](source :: Str, required :: List[Str]) -> Result[T, e.Errors] {
   match yaml.parse_strict(source, required) {
-    Ok(v)  => Ok(v),
+    Ok(v) => Ok(v),
     Err(m) => Err(e.single("", e.code_parse(), m)),
   }
 }
+

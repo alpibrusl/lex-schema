@@ -20,18 +20,23 @@
 #
 # Effects: none.
 
-import "std.cli"  as cli
+import "std.cli" as cli
+
 import "std.json" as json
-import "std.str"  as str
+
+import "std.str" as str
+
 import "std.list" as list
 
-import "./error"       as e
-import "./json_value"  as jv
-import "./schema"      as s
-import "./combine"     as cm
+import "./error" as e
+
+import "./json_value" as jv
+
+import "./schema" as s
+
+import "./combine" as cm
 
 # ---- Bridge: opaque Json -> our Json ADT --------------------------
-
 # Round-trip through string form. Costs one extra serialize+parse
 # per CLI invocation — fine in a CLI startup path where the human
 # is the bottleneck.
@@ -41,7 +46,6 @@ fn parsed_to_value(parsed :: Json) -> Result[jv.Json, e.Errors] {
 }
 
 # ---- Combined entry point -----------------------------------------
-
 # Build a spec, parse `argv`, validate against `schema`. Returns
 # the validated `Json` (a JObj) — drop into downstream business
 # logic with `jv.j_str` / `jv.j_int` / etc.
@@ -50,17 +54,12 @@ fn parsed_to_value(parsed :: Json) -> Result[jv.Json, e.Errors] {
 #   - argv didn't parse against the spec ⇒ code = "parse"
 #   - cli result couldn't be re-decoded   ⇒ code = "parse"
 #   - schema validation failed             ⇒ per-field codes
-fn parse_and_validate_argv(
-  spec :: Json,
-  argv :: List[Str],
-  schema :: s.ModelSchema
-) -> Result[jv.Json, e.Errors] {
+fn parse_and_validate_argv(spec :: Json, argv :: List[Str], schema :: s.ModelSchema) -> Result[jv.Json, e.Errors] {
   match cli.parse(spec, argv) {
     Err(m) => Err(e.single("", e.code_parse(), m)),
-    Ok(parsed) => cm.and_then(parsed_to_value(parsed),
-      fn (v :: jv.Json) -> Result[jv.Json, e.Errors] {
-        s.validate(schema, flatten_cli_result(v))
-      }),
+    Ok(parsed) => cm.and_then(parsed_to_value(parsed), fn (v :: jv.Json) -> Result[jv.Json, e.Errors] {
+      s.validate(schema, flatten_cli_result(v))
+    }),
   }
 }
 
@@ -77,19 +76,17 @@ fn parse_and_validate_argv(
 # If the same key appears in multiple buckets the later one wins;
 # in practice they're disjoint (a CLI tool's flag and option names
 # don't collide with positionals).
-
 fn flatten_cli_result(parsed :: jv.Json) -> jv.Json {
   let bucket_keys := ["positionals", "options", "flags"]
-  let entries := list.fold(bucket_keys, [],
-    fn (acc :: List[(Str, jv.Json)], key :: Str) -> List[(Str, jv.Json)] {
-      match jv.get_field(parsed, key) {
-        None    => acc,
-        Some(b) => match jv.as_obj(b) {
-          None       => acc,
-          Some(pairs) => list.concat(acc, pairs),
-        },
-      }
-    })
+  let entries := list.fold(bucket_keys, [], fn (acc :: List[(Str, jv.Json)], key :: Str) -> List[(Str, jv.Json)] {
+    match jv.get_field(parsed, key) {
+      None => acc,
+      Some(b) => match jv.as_obj(b) {
+        None => acc,
+        Some(pairs) => list.concat(acc, pairs),
+      },
+    }
+  })
   JObj(entries)
 }
 
@@ -98,10 +95,14 @@ fn flatten_cli_result(parsed :: jv.Json) -> jv.Json {
 # Re-exported so callers don't need to import both modules. Useful
 # at the top of a `main` that wants to print help on `--help`
 # before falling into the validation pipeline.
-
-fn help(spec :: Json) -> Str { cli.help(spec) }
+fn help(spec :: Json) -> Str {
+  cli.help(spec)
+}
 
 # The "what's this spec's machine-readable shape" — useful for
 # integration tests and for emitting alongside `to_openapi_schema`
 # in repos that ship both an HTTP and a CLI surface.
-fn describe(spec :: Json) -> Json { cli.describe(spec) }
+fn describe(spec :: Json) -> Json {
+  cli.describe(spec)
+}
+

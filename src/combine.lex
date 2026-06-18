@@ -22,78 +22,42 @@
 # Effects: none.
 
 import "./error" as e
+
 import "std.list" as list
 
 # Two-field builder.
-fn combine2[A, B, T](
-  a :: Result[A, e.Errors],
-  b :: Result[B, e.Errors],
-  build :: (A, B) -> T
-) -> Result[T, e.Errors] {
+fn combine2[A, B, T](a :: Result[A, e.Errors], b :: Result[B, e.Errors], build :: (A, B) -> T) -> Result[T, e.Errors] {
   match (a, b) {
     (Ok(av), Ok(bv)) => Ok(build(av, bv)),
     (ar, br) => Err(e.concat(errs_of(ar), errs_of(br))),
   }
 }
 
-fn combine3[A, B, C, T](
-  a :: Result[A, e.Errors],
-  b :: Result[B, e.Errors],
-  c :: Result[C, e.Errors],
-  build :: (A, B, C) -> T
-) -> Result[T, e.Errors] {
+fn combine3[A, B, C, T](a :: Result[A, e.Errors], b :: Result[B, e.Errors], c :: Result[C, e.Errors], build :: (A, B, C) -> T) -> Result[T, e.Errors] {
   match (a, b, c) {
     (Ok(av), Ok(bv), Ok(cv)) => Ok(build(av, bv, cv)),
     (ar, br, cr) => Err(e.flatten([errs_of(ar), errs_of(br), errs_of(cr)])),
   }
 }
 
-fn combine4[A, B, C, D, T](
-  a :: Result[A, e.Errors],
-  b :: Result[B, e.Errors],
-  c :: Result[C, e.Errors],
-  d :: Result[D, e.Errors],
-  build :: (A, B, C, D) -> T
-) -> Result[T, e.Errors] {
+fn combine4[A, B, C, D, T](a :: Result[A, e.Errors], b :: Result[B, e.Errors], c :: Result[C, e.Errors], d :: Result[D, e.Errors], build :: (A, B, C, D) -> T) -> Result[T, e.Errors] {
   match (a, b, c, d) {
     (Ok(av), Ok(bv), Ok(cv), Ok(dv)) => Ok(build(av, bv, cv, dv)),
-    (ar, br, cr, dr) => Err(e.flatten([
-      errs_of(ar), errs_of(br), errs_of(cr), errs_of(dr),
-    ])),
+    (ar, br, cr, dr) => Err(e.flatten([errs_of(ar), errs_of(br), errs_of(cr), errs_of(dr)])),
   }
 }
 
-fn combine5[A, B, C, D, E, T](
-  a :: Result[A, e.Errors],
-  b :: Result[B, e.Errors],
-  c :: Result[C, e.Errors],
-  d :: Result[D, e.Errors],
-  ee :: Result[E, e.Errors],
-  build :: (A, B, C, D, E) -> T
-) -> Result[T, e.Errors] {
+fn combine5[A, B, C, D, E, T](a :: Result[A, e.Errors], b :: Result[B, e.Errors], c :: Result[C, e.Errors], d :: Result[D, e.Errors], ee :: Result[E, e.Errors], build :: (A, B, C, D, E) -> T) -> Result[T, e.Errors] {
   match (a, b, c, d, ee) {
     (Ok(av), Ok(bv), Ok(cv), Ok(dv), Ok(ev)) => Ok(build(av, bv, cv, dv, ev)),
-    (ar, br, cr, dr, er) => Err(e.flatten([
-      errs_of(ar), errs_of(br), errs_of(cr), errs_of(dr), errs_of(er),
-    ])),
+    (ar, br, cr, dr, er) => Err(e.flatten([errs_of(ar), errs_of(br), errs_of(cr), errs_of(dr), errs_of(er)])),
   }
 }
 
-fn combine6[A, B, C, D, E, F, T](
-  a :: Result[A, e.Errors],
-  b :: Result[B, e.Errors],
-  c :: Result[C, e.Errors],
-  d :: Result[D, e.Errors],
-  ee :: Result[E, e.Errors],
-  f :: Result[F, e.Errors],
-  build :: (A, B, C, D, E, F) -> T
-) -> Result[T, e.Errors] {
+fn combine6[A, B, C, D, E, F, T](a :: Result[A, e.Errors], b :: Result[B, e.Errors], c :: Result[C, e.Errors], d :: Result[D, e.Errors], ee :: Result[E, e.Errors], f :: Result[F, e.Errors], build :: (A, B, C, D, E, F) -> T) -> Result[T, e.Errors] {
   match (a, b, c, d, ee, f) {
-    (Ok(av), Ok(bv), Ok(cv), Ok(dv), Ok(ev), Ok(fv)) =>
-      Ok(build(av, bv, cv, dv, ev, fv)),
-    (ar, br, cr, dr, er, fr) => Err(e.flatten([
-      errs_of(ar), errs_of(br), errs_of(cr), errs_of(dr), errs_of(er), errs_of(fr),
-    ])),
+    (Ok(av), Ok(bv), Ok(cv), Ok(dv), Ok(ev), Ok(fv)) => Ok(build(av, bv, cv, dv, ev, fv)),
+    (ar, br, cr, dr, er, fr) => Err(e.flatten([errs_of(ar), errs_of(br), errs_of(cr), errs_of(dr), errs_of(er), errs_of(fr)])),
   }
 }
 
@@ -101,7 +65,7 @@ fn combine6[A, B, C, D, E, F, T](
 # functions use this to merge sibling-field failures.
 fn errs_of[T](r :: Result[T, e.Errors]) -> e.Errors {
   match r {
-    Ok(_)   => [],
+    Ok(_) => [],
     Err(es) => es,
   }
 }
@@ -113,12 +77,9 @@ fn errs_of[T](r :: Result[T, e.Errors]) -> e.Errors {
 # Errors do *not* accumulate across the bind boundary (the second
 # validator can't even run unless the first succeeded). For sibling
 # fields where you want full accumulation, use `combineN`.
-fn and_then[A, B](
-  r :: Result[A, e.Errors],
-  k :: (A) -> Result[B, e.Errors]
-) -> Result[B, e.Errors] {
+fn and_then[A, B](r :: Result[A, e.Errors], k :: (A) -> Result[B, e.Errors]) -> Result[B, e.Errors] {
   match r {
-    Ok(a)   => k(a),
+    Ok(a) => k(a),
     Err(es) => Err(es),
   }
 }
@@ -127,21 +88,22 @@ fn and_then[A, B](
 # receives the accumulated errors and decides what to do — often used
 # to fall back to a default value (returning `Ok(default)`) or to
 # transform the errors before re-raising (`Err(transform(errs))`).
-fn or_else[T](
-  r :: Result[T, e.Errors],
-  handler :: (e.Errors) -> Result[T, e.Errors]
-) -> Result[T, e.Errors] {
+fn or_else[T](r :: Result[T, e.Errors], handler :: (e.Errors) -> Result[T, e.Errors]) -> Result[T, e.Errors] {
   match r {
-    Ok(v)   => Ok(v),
+    Ok(v) => Ok(v),
     Err(es) => handler(es),
   }
 }
 
 # Lift a plain value into the Result world.
-fn pure[T](v :: T) -> Result[T, e.Errors] { Ok(v) }
+fn pure[T](v :: T) -> Result[T, e.Errors] {
+  Ok(v)
+}
 
 # Force an Errors into the Result world.
-fn fail[T](es :: e.Errors) -> Result[T, e.Errors] { Err(es) }
+fn fail[T](es :: e.Errors) -> Result[T, e.Errors] {
+  Err(es)
+}
 
 # Walk a List of items, applying `f` to each. Errors accumulate
 # across the entire list before short-circuiting. The output preserves
@@ -149,26 +111,24 @@ fn fail[T](es :: e.Errors) -> Result[T, e.Errors] { Err(es) }
 #
 # This is the natural lift for "validate every element of a homogeneous
 # list" — e.g., when the field is `List[Email]`.
-fn traverse[A, B](
-  xs :: List[A],
-  f :: (A) -> Result[B, e.Errors]
-) -> Result[List[B], e.Errors] {
-  list.fold(xs, traverse_init(),
-    fn (acc :: Result[List[B], e.Errors], x :: A) -> Result[List[B], e.Errors] {
-      match (acc, f(x)) {
-        (Ok(out), Ok(b))    => Ok(list.concat(out, [b])),
-        (Ok(_),   Err(es))  => Err(es),
-        (Err(es), Ok(_))    => Err(es),
-        (Err(es), Err(es2)) => Err(list.concat(es, es2)),
-      }
-    })
+fn traverse[A, B](xs :: List[A], f :: (A) -> Result[B, e.Errors]) -> Result[List[B], e.Errors] {
+  list.fold(xs, traverse_init(), fn (acc :: Result[List[B], e.Errors], x :: A) -> Result[List[B], e.Errors] {
+    match (acc, f(x)) {
+      (Ok(out), Ok(b)) => Ok(list.concat(out, [b])),
+      (Ok(_), Err(es)) => Err(es),
+      (Err(es), Ok(_)) => Err(es),
+      (Err(es), Err(es2)) => Err(list.concat(es, es2)),
+    }
+  })
 }
 
 # Polymorphic empty accumulator for `traverse`. Wrapped in its own
 # function so the caller's `Result[List[B], _]` shape pins down the
 # `B` parameter through ordinary return-type inference instead of an
 # inline type ascription (which Lex doesn't support).
-fn traverse_init[B]() -> Result[List[B], e.Errors] { Ok([]) }
+fn traverse_init[B]() -> Result[List[B], e.Errors] {
+  Ok([])
+}
 
 # Apply a path-prefix to all errors a sub-validator emits. Useful
 # when a nested record builder reports leaf errors with just the
@@ -179,7 +139,7 @@ fn traverse_init[B]() -> Result[List[B], e.Errors] { Ok([]) }
 # wrapping with `with_path("address", ...)` rewrites to `address.zip`.
 fn with_path[T](prefix :: Str, r :: Result[T, e.Errors]) -> Result[T, e.Errors] {
   match r {
-    Ok(v)   => Ok(v),
+    Ok(v) => Ok(v),
     Err(es) => Err(e.prefix_path(prefix, es)),
   }
 }
@@ -202,33 +162,28 @@ fn with_path[T](prefix :: Str, r :: Result[T, e.Errors]) -> Result[T, e.Errors] 
 #
 # Errors from every check accumulate, never short-circuit. The
 # pydantic analog is `@model_validator(mode="after")`.
-fn cross_check[T](
-  value :: T,
-  checks :: List[(T) -> Option[e.Errors]]
-) -> Result[T, e.Errors] {
-  let errs := list.fold(checks, [],
-    fn (
-      acc :: e.Errors,
-      check :: (T) -> Option[e.Errors]
-    ) -> e.Errors {
-      match check(value) {
-        None     => acc,
-        Some(es) => list.concat(acc, es),
-      }
-    })
-  if e.is_ok(errs) { Ok(value) } else { Err(errs) }
+fn cross_check[T](value :: T, checks :: List[(T) -> Option[e.Errors]]) -> Result[T, e.Errors] {
+  let errs := list.fold(checks, [], fn (acc :: e.Errors, check :: (T) -> Option[e.Errors]) -> e.Errors {
+    match check(value) {
+      None => acc,
+      Some(es) => list.concat(acc, es),
+    }
+  })
+  if e.is_ok(errs) {
+    Ok(value)
+  } else {
+    Err(errs)
+  }
 }
 
 # Same as `cross_check` but takes a single predicate + a fixed
 # code/message pair — convenient for one-off "X and Y must agree"
 # checks where building a full `Option[Errors]` shape is overkill.
-fn require[T](
-  value :: T,
-  predicate :: (T) -> Bool,
-  path :: Str,
-  code :: Str,
-  message :: Str
-) -> Result[T, e.Errors] {
-  if predicate(value) { Ok(value) }
-  else { Err(e.single(path, code, message)) }
+fn require[T](value :: T, predicate :: (T) -> Bool, path :: Str, code :: Str, message :: Str) -> Result[T, e.Errors] {
+  if predicate(value) {
+    Ok(value)
+  } else {
+    Err(e.single(path, code, message))
+  }
 }
+

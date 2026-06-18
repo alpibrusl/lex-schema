@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Publish to lex-hub when a v* tag is being pushed. Other pushes are untouched.
+# Skip entirely with `git push --no-verify`.
+
+publish_tag=""
+while read -r local_ref _local_sha _remote_ref _remote_sha; do
+  case "$local_ref" in
+    refs/tags/v*) publish_tag="${local_ref#refs/tags/}" ;;
+  esac
+done
+
+if [ -z "$publish_tag" ]; then
+  exit 0
+fi
+
+echo "[pre-push] tag $publish_tag → publishing to lex-hub"
+if [ -z "${LEX_PUBLISH_TOKEN:-}" ]; then
+  echo "[pre-push] LEX_PUBLISH_TOKEN not set — cannot publish."
+  echo "           set it, or re-run with: git push --no-verify"
+  exit 1
+fi
+
+make publish
+echo "[pre-push] published $publish_tag"

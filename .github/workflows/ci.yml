@@ -1,0 +1,46 @@
+name: ci
+
+# Public verification only. Publishing to lex-hub is done locally
+# (make publish / pre-push hook) and no longer runs here.
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "lex-lang release tag to install (e.g. v0.9.7)"
+        required: false
+        default: "v0.9.7"
+
+env:
+  # Pinned lex toolchain version. Update here when lex-lang ships a new
+  # release that lex-schema depends on.
+  LEX_VERSION: "v0.9.7"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install lex toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || env.LEX_VERSION }}"
+          URL="https://github.com/alpibrusl/lex-lang/releases/download/${TAG}/lex-${TAG}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "Downloading lex ${TAG} from ${URL}"
+          curl -fsSL "${URL}" -o /tmp/lex.tar.gz
+          tar -xzf /tmp/lex.tar.gz -C /tmp
+          sudo mv "/tmp/lex-${TAG}-x86_64-unknown-linux-gnu/lex" /usr/local/bin/lex
+          sudo chmod +x /usr/local/bin/lex
+          lex --version
+
+      # The canonical project loop: fmt --check + check --strict + test
+      # (+ pkg install). Same umbrella `make publish` runs locally, so CI and
+      # the local publish gate stay in lockstep.
+      - name: Validate (lex ci)
+        run: lex ci
