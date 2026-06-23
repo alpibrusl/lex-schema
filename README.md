@@ -838,4 +838,4 @@ EUPL-1.2 — to match the parent `lex-lang` project.
 
 ---
 
-Built under the principles of [Trust Without Comprehension](https://alpibru.com/manifesto).
+Built under the principles of [Trust Without Comprehension](https://lexlang.org/manifesto).

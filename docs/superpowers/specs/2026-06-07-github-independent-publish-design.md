@@ -24,7 +24,7 @@ build the larger `lex push`/`lex pull` op-log replication feature (see
   the typed op-log, type-checks, advances the branch head, and returns
   `head_op`. **The command is a plain authenticated HTTP call — it has no
   GitHub dependency.** GitHub Actions is merely where it currently runs.
-- `registry = "https://lexhub.alpibru.com"` is already set in `lex.toml`.
+- `registry = "https://hub.lexlang.org"` is already set in `lex.toml`.
 - lex-vcs is op-log-native and content-addressed: writes dedup on `OpId`, so
   re-publishing the same state is idempotent (same `head_op`, no duplication).
 - The repo already uses a `.githooks/` + `make hooks` convention (today: a
