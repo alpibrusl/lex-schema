@@ -75,6 +75,17 @@ fn parse_string_with_escape() -> Result[Unit, Str] {
   }
 }
 
+# Regression: \b and \f are valid JSON escapes (RFC 8259). They used to return a
+# parse error, which made lex-llm silently drop any LLM response containing them
+# (markdown/design output triggers this). They must now parse successfully.
+fn parse_b_f_escapes() -> Result[Unit, Str] {
+  match jv.parse("{\"a\":\"x\\fy\\bz\"}") {
+    Ok(JObj(_)) => Ok(()),
+    Ok(_) => Err("not an object"),
+    Err(_) => Err("\\b/\\f escapes rejected"),
+  }
+}
+
 # Regression: parsing must be O(n), not O(n²). A multi-KB string value used to
 # blow the VM step limit because `char_at` indexed the source by codepoint
 # (O(p) per char). With `str.char_at` (O(1)) this parses cheaply. We build the
@@ -271,7 +282,7 @@ fn j_optional_present_ok() -> Result[Unit, Str] {
 
 # ---- Suite --------------------------------------------------------
 fn suite() -> List[Result[Unit, Str]] {
-  [parse_null(), parse_true(), parse_false(), parse_int_positive(), parse_int_negative(), parse_float(), parse_string(), parse_string_with_escape(), parse_large_string(), parse_empty_array(), parse_array_mixed(), parse_empty_object(), parse_object_nested(), parse_whitespace_tolerant(), parse_unterminated_string(), parse_garbage(), parse_trailing_garbage(), j_str_field_present(), j_str_missing_field(), j_str_type_error(), j_int_with_constraint(), j_optional_absent_ok(), j_optional_null_ok(), j_optional_present_ok()]
+  [parse_null(), parse_true(), parse_false(), parse_int_positive(), parse_int_negative(), parse_float(), parse_string(), parse_string_with_escape(), parse_b_f_escapes(), parse_large_string(), parse_empty_array(), parse_array_mixed(), parse_empty_object(), parse_object_nested(), parse_whitespace_tolerant(), parse_unterminated_string(), parse_garbage(), parse_trailing_garbage(), j_str_field_present(), j_str_missing_field(), j_str_type_error(), j_int_with_constraint(), j_optional_absent_ok(), j_optional_null_ok(), j_optional_present_ok()]
 }
 
 fn run_all() -> Int {
