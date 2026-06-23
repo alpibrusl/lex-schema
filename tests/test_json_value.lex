@@ -75,6 +75,41 @@ fn parse_string_with_escape() -> Result[Unit, Str] {
   }
 }
 
+# Regression: \b and \f are valid JSON escapes (RFC 8259). They used to return a
+# parse error, which made lex-llm silently drop any LLM response containing them
+# (markdown/design output triggers this). They must now parse successfully.
+fn parse_b_f_escapes() -> Result[Unit, Str] {
+  match jv.parse("{\"a\":\"x\\fy\\bz\"}") {
+    Ok(JObj(_)) => Ok(()),
+    Ok(_) => Err("not an object"),
+    Err(_) => Err("\\b/\\f escapes rejected"),
+  }
+}
+
+# Regression: parsing must be O(n), not O(n²). A multi-KB string value used to
+# blow the VM step limit because `char_at` indexed the source by codepoint
+# (O(p) per char). With `str.char_at` (O(1)) this parses cheaply. We build the
+# input via doubling to avoid an O(n²) string builder in the test itself.
+fn repeat_pow2(s :: Str, doublings :: Int) -> Str {
+  if doublings <= 0 {
+    s
+  } else {
+    repeat_pow2(str.concat(s, s), doublings - 1)
+  }
+}
+
+fn parse_large_string() -> Result[Unit, Str] {
+  let body := repeat_pow2("abcdefgh", 9)
+  match jv.parse(str.concat("\"", str.concat(body, "\""))) {
+    Ok(JStr(s)) => if str.len(s) == 4096 {
+      Ok(())
+    } else {
+      Err(str.concat("wrong length: ", int.to_str(str.len(s))))
+    },
+    _ => Err("large string did not parse"),
+  }
+}
+
 # ---- Parser: containers -------------------------------------------
 fn parse_empty_array() -> Result[Unit, Str] {
   match jv.parse("[]") {
@@ -247,7 +282,7 @@ fn j_optional_present_ok() -> Result[Unit, Str] {
 
 # ---- Suite --------------------------------------------------------
 fn suite() -> List[Result[Unit, Str]] {
-  [parse_null(), parse_true(), parse_false(), parse_int_positive(), parse_int_negative(), parse_float(), parse_string(), parse_string_with_escape(), parse_empty_array(), parse_array_mixed(), parse_empty_object(), parse_object_nested(), parse_whitespace_tolerant(), parse_unterminated_string(), parse_garbage(), parse_trailing_garbage(), j_str_field_present(), j_str_missing_field(), j_str_type_error(), j_int_with_constraint(), j_optional_absent_ok(), j_optional_null_ok(), j_optional_present_ok()]
+  [parse_null(), parse_true(), parse_false(), parse_int_positive(), parse_int_negative(), parse_float(), parse_string(), parse_string_with_escape(), parse_b_f_escapes(), parse_large_string(), parse_empty_array(), parse_array_mixed(), parse_empty_object(), parse_object_nested(), parse_whitespace_tolerant(), parse_unterminated_string(), parse_garbage(), parse_trailing_garbage(), j_str_field_present(), j_str_missing_field(), j_str_type_error(), j_int_with_constraint(), j_optional_absent_ok(), j_optional_null_ok(), j_optional_present_ok()]
 }
 
 fn run_all() -> Int {
