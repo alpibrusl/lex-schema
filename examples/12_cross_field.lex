@@ -17,107 +17,71 @@
 #   lex run examples/12_cross_field.lex demo_mismatched
 #   lex run examples/12_cross_field.lex demo_reversed_dates
 
-import "../src/error"       as e
-import "../src/constraints" as c
-import "../src/field"       as f
-import "../src/combine"     as cm
-import "../src/json_value"  as jv
-import "../src/datetime"    as dt
+import "../src/error" as e
 
-type Signup = {
-  email :: Str,
-  password :: Str,
-  confirm_password :: Str,
-  start_date :: Str,
-  end_date :: Str,
-}
+import "../src/constraints" as c
+
+import "../src/field" as f
+
+import "../src/combine" as cm
+
+import "../src/json_value" as jv
+
+import "../src/datetime" as dt
+
+type Signup = { email :: Str, password :: Str, confirm_password :: Str, start_date :: Str, end_date :: Str }
 
 fn build(em :: Str, p :: Str, cp :: Str, sd :: Str, ed :: Str) -> Signup {
   { email: em, password: p, confirm_password: cp, start_date: sd, end_date: ed }
 }
 
 # ---- Cross-field rules --------------------------------------------
-
 fn passwords_match(u :: Signup) -> Option[e.Errors] {
-  if u.password == u.confirm_password { None }
-  else {
-    Some(e.single("confirm_password", "mismatch",
-                  "must match password"))
+  if u.password == u.confirm_password {
+    None
+  } else {
+    Some(e.single("confirm_password", "mismatch", "must match password"))
   }
 }
 
 fn end_after_start(u :: Signup) -> Option[e.Errors] {
-  # We accept that both fields parse — the field-level validator
-  # already enforced ISO 8601. Here we only check ordering, by
-  # comparing canonical-form strings... no, by re-parsing both
-  # through `dt` and using `DateAfter`.
-  match dt.check_iso_datetime("end_date", u.end_date,
-                               [DateAfter(u.start_date)]) {
-    Ok(_)   => None,
+  match dt.check_iso_datetime("end_date", u.end_date, [DateAfter(u.start_date)]) {
+    Ok(_) => None,
     Err(es) => Some(es),
   }
 }
 
 # ---- Validator ----------------------------------------------------
-
 fn validate(raw :: Signup) -> Result[Signup, e.Errors] {
-  cm.and_then(
-    cm.combine5(
-      f.check_str("email",           raw.email,           [StrEmail]),
-      f.check_str("password",        raw.password,        [StrMinLen(8)]),
-      f.check_str("confirm_password",raw.confirm_password,[StrMinLen(8)]),
-      f.check_str("start_date",      raw.start_date,      []),
-      f.check_str("end_date",        raw.end_date,        []),
-      build
-    ),
-    fn (u :: Signup) -> Result[Signup, e.Errors] {
-      cm.cross_check(u, [passwords_match, end_after_start])
-    }
-  )
+  cm.and_then(cm.combine5(f.check_str("email", raw.email, [StrEmail]), f.check_str("password", raw.password, [StrMinLen(8)]), f.check_str("confirm_password", raw.confirm_password, [StrMinLen(8)]), f.check_str("start_date", raw.start_date, []), f.check_str("end_date", raw.end_date, []), build), fn (u :: Signup) -> Result[Signup, e.Errors] {
+    cm.cross_check(u, [passwords_match, end_after_start])
+  })
 }
 
 # ---- Demos --------------------------------------------------------
-
 fn demo_good() -> Result[Signup, e.Errors] {
-  validate({
-    email:            "alice@example.com",
-    password:         "correcthorse9",
-    confirm_password: "correcthorse9",
-    start_date:       "2026-01-01T00:00:00Z",
-    end_date:         "2026-12-31T23:59:59Z",
-  })
+  validate({ email: "alice@example.com", password: "correcthorse9", confirm_password: "correcthorse9", start_date: "2026-01-01T00:00:00Z", end_date: "2026-12-31T23:59:59Z" })
 }
 
 fn demo_mismatched() -> Result[Signup, e.Errors] {
-  validate({
-    email:            "alice@example.com",
-    password:         "correcthorse9",
-    confirm_password: "different9",
-    start_date:       "2026-01-01T00:00:00Z",
-    end_date:         "2026-12-31T23:59:59Z",
-  })
+  validate({ email: "alice@example.com", password: "correcthorse9", confirm_password: "different9", start_date: "2026-01-01T00:00:00Z", end_date: "2026-12-31T23:59:59Z" })
 }
 
 fn demo_reversed_dates() -> Result[Signup, e.Errors] {
-  validate({
-    email:            "alice@example.com",
-    password:         "correcthorse9",
-    confirm_password: "correcthorse9",
-    start_date:       "2026-12-31T23:59:59Z",
-    end_date:         "2026-01-01T00:00:00Z",
-  })
+  validate({ email: "alice@example.com", password: "correcthorse9", confirm_password: "correcthorse9", start_date: "2026-12-31T23:59:59Z", end_date: "2026-01-01T00:00:00Z" })
 }
 
 fn format_mismatched() -> Str {
   match demo_mismatched() {
-    Ok(_)   => "no errors",
+    Ok(_) => "no errors",
     Err(es) => e.format(es),
   }
 }
 
 fn format_reversed() -> Str {
   match demo_reversed_dates() {
-    Ok(_)   => "no errors",
+    Ok(_) => "no errors",
     Err(es) => e.format(es),
   }
 }
+
