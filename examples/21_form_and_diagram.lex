@@ -19,66 +19,49 @@
 #   lex run examples/21_form_and_diagram.lex demo_mermaid
 #   lex run examples/21_form_and_diagram.lex demo_go_struct
 
-import "../src/error"       as e
+import "../src/error" as e
+
 import "../src/constraints" as c
-import "../src/coerce"      as coerce
-import "../src/combine"     as cm
-import "../src/form"        as form
-import "../src/schema"      as s
-import "../src/sdk"         as sdk
+
+import "../src/coerce" as coerce
+
+import "../src/combine" as cm
+
+import "../src/form" as form
+
+import "../src/schema" as s
+
+import "../src/sdk" as sdk
 
 # ---- Login schema -------------------------------------------------
-
-type LoginFields = {
-  username :: Str,
-  password :: Str,
-  remember :: Bool,
-}
+type LoginFields = { username :: Str, password :: Str, remember :: Bool }
 
 fn login_schema() -> s.ModelSchema {
-  {
-    title: "Login",
-    description: "Form-encoded login submission",
-    fields: [
-      s.required_str("username", [StrMinLen(3), StrMaxLen(32),
-                                  StrPattern("^[a-zA-Z0-9_]+$")]),
-      s.required_str("password", [StrMinLen(8), StrMaxLen(128)]),
-      s.required_bool("remember"),
-    ],
-  }
+  { title: "Login", description: "Form-encoded login submission", fields: [s.required_str("username", [StrMinLen(3), StrMaxLen(32), StrPattern("^[a-zA-Z0-9_]+$")]), s.required_str("password", [StrMinLen(8), StrMaxLen(128)]), s.required_bool("remember")] }
 }
 
 # ---- Validation pipeline ------------------------------------------
-
 fn build_login(un :: Str, pw :: Str, r :: Bool) -> LoginFields {
   { username: un, password: pw, remember: r }
 }
 
 fn parse_login(body :: Str) -> Result[LoginFields, e.Errors] {
   let m := form.decode_urlencoded(body)
-  cm.combine3(
-    coerce.require_str_from_map(m, "username",
-      [StrMinLen(3), StrMaxLen(32), StrPattern("^[a-zA-Z0-9_]+$")]),
-    coerce.require_str_from_map(m, "password", [StrMinLen(8), StrMaxLen(128)]),
-    coerce.require_bool_from_map(m, "remember"),
-    build_login
-  )
+  cm.combine3(coerce.require_str_from_map(m, "username", [StrMinLen(3), StrMaxLen(32), StrPattern("^[a-zA-Z0-9_]+$")]), coerce.require_str_from_map(m, "password", [StrMinLen(8), StrMaxLen(128)]), coerce.require_bool_from_map(m, "remember"), build_login)
 }
 
 # ---- Demos --------------------------------------------------------
-
 fn demo_login_good() -> Result[LoginFields, e.Errors] {
   parse_login("username=alice_42&password=correcthorse9&remember=true")
 }
 
 fn demo_login_bad() -> Result[LoginFields, e.Errors] {
-  # username too short, password too short, remember not a bool.
   parse_login("username=a!&password=weak&remember=maybe")
 }
 
 fn format_login_bad() -> Str {
   match demo_login_bad() {
-    Ok(_)   => "(no errors)",
+    Ok(_) => "(no errors)",
     Err(es) => e.format(es),
   }
 }
@@ -89,9 +72,12 @@ fn demo_login_encoded() -> Result[LoginFields, e.Errors] {
 }
 
 # ---- Mermaid ER diagram ------------------------------------------
-
-fn demo_mermaid() -> Str { s.to_mermaid_er(login_schema()) }
+fn demo_mermaid() -> Str {
+  s.to_mermaid_er(login_schema())
+}
 
 # ---- Go codegen --------------------------------------------------
+fn demo_go_struct() -> Str {
+  sdk.to_go_struct(login_schema())
+}
 
-fn demo_go_struct() -> Str { sdk.to_go_struct(login_schema()) }

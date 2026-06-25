@@ -19,16 +19,15 @@
 #   lex run examples/07_safe_mode_json.lex validate_missing
 #   lex run examples/07_safe_mode_json.lex validate_garbage
 
-import "../src/error"       as e
-import "../src/constraints" as c
-import "../src/combine"     as cm
-import "../src/json_value"  as jv
+import "../src/error" as e
 
-type User = {
-  email :: Str,
-  username :: Str,
-  age :: Int,
-}
+import "../src/constraints" as c
+
+import "../src/combine" as cm
+
+import "../src/json_value" as jv
+
+type User = { email :: Str, username :: Str, age :: Int }
 
 fn mk_user(em :: Str, un :: Str, ag :: Int) -> User {
   { email: em, username: un, age: ag }
@@ -36,26 +35,18 @@ fn mk_user(em :: Str, un :: Str, ag :: Int) -> User {
 
 # Validate against the Json ADT — every step is total.
 fn validate_user(j :: jv.Json) -> Result[User, e.Errors] {
-  cm.combine3(
-    jv.j_str("", j, "email",    [StrEmail]),
-    jv.j_str("", j, "username", [StrMinLen(3), StrMaxLen(32),
-                                 StrPattern("^[a-zA-Z0-9_]+$")]),
-    jv.j_int("", j, "age",      [IntInRange(13, 130)]),
-    mk_user
-  )
+  cm.combine3(jv.j_str("", j, "email", [StrEmail]), jv.j_str("", j, "username", [StrMinLen(3), StrMaxLen(32), StrPattern("^[a-zA-Z0-9_]+$")]), jv.j_int("", j, "age", [IntInRange(13, 130)]), mk_user)
 }
 
 fn parse_user(body :: Str) -> Result[User, e.Errors] {
-  cm.and_then(jv.parse_into_errors(body),
-    fn (j :: jv.Json) -> Result[User, e.Errors] { validate_user(j) })
+  cm.and_then(jv.parse_into_errors(body), fn (j :: jv.Json) -> Result[User, e.Errors] {
+    validate_user(j)
+  })
 }
 
 # ---- Demos ---------------------------------------------------------
-
 fn validate_good() -> Result[User, e.Errors] {
-  parse_user(
-    "{\"email\":\"alice@example.com\",\"username\":\"alice_42\",\"age\":29}"
-  )
+  parse_user("{\"email\":\"alice@example.com\",\"username\":\"alice_42\",\"age\":29}")
 }
 
 # The trust-model demo: `age` arrives as a string. With the regular
@@ -63,15 +54,11 @@ fn validate_good() -> Result[User, e.Errors] {
 # downstream code does `user.age + 1`. With the Json ADT path it
 # surfaces as a precise typed error.
 fn validate_type_wrong() -> Result[User, e.Errors] {
-  parse_user(
-    "{\"email\":\"alice@example.com\",\"username\":\"alice_42\",\"age\":\"thirty\"}"
-  )
+  parse_user("{\"email\":\"alice@example.com\",\"username\":\"alice_42\",\"age\":\"thirty\"}")
 }
 
 fn validate_missing() -> Result[User, e.Errors] {
-  parse_user(
-    "{\"email\":\"alice@example.com\",\"username\":\"alice_42\"}"
-  )
+  parse_user("{\"email\":\"alice@example.com\",\"username\":\"alice_42\"}")
 }
 
 fn validate_garbage() -> Result[User, e.Errors] {
@@ -80,21 +67,22 @@ fn validate_garbage() -> Result[User, e.Errors] {
 
 fn format_type_wrong() -> Str {
   match validate_type_wrong() {
-    Ok(_)   => "no errors",
+    Ok(_) => "no errors",
     Err(es) => e.format(es),
   }
 }
 
 fn format_missing() -> Str {
   match validate_missing() {
-    Ok(_)   => "no errors",
+    Ok(_) => "no errors",
     Err(es) => e.format(es),
   }
 }
 
 fn format_garbage() -> Str {
   match validate_garbage() {
-    Ok(_)   => "no errors",
+    Ok(_) => "no errors",
     Err(es) => e.format(es),
   }
 }
+

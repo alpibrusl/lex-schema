@@ -10,17 +10,13 @@
 #   lex run examples/19_fuzz_driver.lex demo_escape_count
 
 import "../src/constraints" as c
-import "../src/schema"      as s
-import "../src/fuzz"        as fz
+
+import "../src/schema" as s
+
+import "../src/fuzz" as fz
 
 fn user_schema() -> s.ModelSchema {
-  {
-    title: "User", description: "",
-    fields: [
-      s.required_str("name", [StrMinLen(1), StrMaxLen(80)]),
-      s.required_int("age",  [IntInRange(13, 130)]),
-    ],
-  }
+  { title: "User", description: "", fields: [s.required_str("name", [StrMinLen(1), StrMaxLen(80)]), s.required_int("age", [IntInRange(13, 130)])] }
 }
 
 fn demo_tallies() -> Str {
@@ -30,3 +26,4 @@ fn demo_tallies() -> Str {
 fn demo_escape_count() -> Int {
   fz.count_escapes(user_schema())
 }
+
