@@ -75,7 +75,7 @@ fn strict_rejects_one_extra() -> Result[Unit, Str] {
     Ok(_) => Err("strict should not pass with extras"),
     Err(es) => {
       let has := list.fold(es, false, fn (acc :: Bool, err :: e.Error) -> Bool {
-        acc or err.code == "unexpected" and err.path == "password_hash"
+        acc or err.code == e.code_extra() and err.path == "password_hash"
       })
       if has {
         Ok(())
@@ -92,7 +92,7 @@ fn strict_reports_every_extra() -> Result[Unit, Str] {
     Ok(_) => Err("strict should not pass with extras"),
     Err(es) => {
       let unexpected := list.fold(es, 0, fn (acc :: Int, err :: e.Error) -> Int {
-        if err.code == "unexpected" {
+        if err.code == e.code_extra() {
           acc + 1
         } else {
           acc
@@ -171,12 +171,25 @@ fn suite() -> List[Result[Unit, Str]] {
   [lossy_strips_extras(), lossy_passes_clean_input(), lossy_returns_empty_on_failure(), strict_rejects_one_extra(), strict_reports_every_extra(), strict_passes_clean_input(), strict_rejects_non_object(), serialize_defaults_to_lossy(), openapi_response_shape(), openapi_response_uses_title()]
 }
 
-fn run_all() -> Int {
+fn run_all_count() -> Int {
   list.fold(suite(), 0, fn (acc :: Int, r :: Result[Unit, Str]) -> Int {
     match r {
       Ok(_) => acc,
       Err(_) => acc + 1,
     }
   })
+}
+
+# `lex test` calls `run_all` and DISCARDS what it returns (lex-lang#757), so a
+# returned failure count reports `ok` however many assertions failed. Only a
+# raise fails a file — the same idiom lex-ems, lex-web and lex-guard use.
+# Run `run_all_count` directly to see which assertions failed.
+fn run_all() -> Unit {
+  if run_all_count() == 0 {
+    ()
+  } else {
+    let __boom := 1 / 0
+    ()
+  }
 }
 

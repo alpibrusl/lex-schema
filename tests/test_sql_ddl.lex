@@ -281,12 +281,25 @@ fn suite() -> List[Result[Unit, Str]] {
   [pg_create_table(), pg_id_primary_key(), pg_varchar_with_maxlen(), pg_text_without_maxlen(), pg_bigint(), pg_not_null_when_required(), pg_nullable_when_optional(), pg_range_check(), pg_min_len_check(), pg_email_regex(), pg_uuid_regex(), pg_one_of_in(), pg_nested_emits_buyer_first(), pg_nested_fk_reference(), pg_array_jsonb(), pg_float_double_precision(), pg_bool_boolean(), pg_pascalcase_title_to_snake(), sqlite_integer_for_int(), sqlite_text_for_str(), sqlite_bool_as_integer(), sqlite_no_regex_check(), sqlite_in_list_still_works()]
 }
 
-fn run_all() -> Int {
+fn run_all_count() -> Int {
   list.fold(suite(), 0, fn (acc :: Int, v :: Result[Unit, Str]) -> Int {
     match v {
       Ok(_) => acc,
       Err(_) => acc + 1,
     }
   })
+}
+
+# `lex test` calls `run_all` and DISCARDS what it returns (lex-lang#757), so a
+# returned failure count reports `ok` however many assertions failed. Only a
+# raise fails a file — the same idiom lex-ems, lex-web and lex-guard use.
+# Run `run_all_count` directly to see which assertions failed.
+fn run_all() -> Unit {
+  if run_all_count() == 0 {
+    ()
+  } else {
+    let __boom := 1 / 0
+    ()
+  }
 }
 

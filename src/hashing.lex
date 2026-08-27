@@ -44,7 +44,7 @@ import "std.crypto" as crypto
 
 # ---- Argon2id ---------------------------------------------------
 # Recommended default parameters (OWASP 2023 guidance):
-#   m_cost = 65536 (64 MiB), t_cost = 3, p_cost = 4
+#   m_cost = 65536 (64 MiB), t_cost = 3
 fn argon2id_m_cost() -> Int {
   65536
 }
@@ -53,15 +53,20 @@ fn argon2id_t_cost() -> Int {
   3
 }
 
-fn argon2id_p_cost() -> Int {
-  4
+# std.crypto.argon2id takes (password, salt, t_cost, m_cost, out_len) — t_cost
+# FIRST — and exposes no parallelism knob: the runtime pins p=1, which is what
+# the PHC string and libsodium's argon2id_str assume, so hashes stay comparable
+# across machines. The 32-byte output matches the SHA-256-sized tokens the rest
+# of this module produces.
+fn argon2id_out_len() -> Int {
+  32
 }
 
 # Hash `password` with argon2id using a fresh random salt.
 # Returns an opaque `salt$hex_hash` string suitable for storage.
 fn argon2id_hash(password :: Str) -> [random] Result[Str, Str] {
   let salt := crypto.random_str_hex(16)
-  match crypto.argon2id(bytes.from_str(password), bytes.from_str(salt), argon2id_m_cost(), argon2id_t_cost(), argon2id_p_cost()) {
+  match crypto.argon2id(bytes.from_str(password), bytes.from_str(salt), argon2id_t_cost(), argon2id_m_cost(), argon2id_out_len()) {
     Err(e) => Err(e),
     Ok(h) => Ok(str.concat(salt, str.concat("$", crypto.hex_encode(h)))),
   }
@@ -83,7 +88,7 @@ fn argon2id_verify(stored :: Str, candidate :: Str) -> Result[Bool, Str] {
       Some(s) => s,
       None => "",
     }
-    match crypto.argon2id(bytes.from_str(candidate), bytes.from_str(salt), argon2id_m_cost(), argon2id_t_cost(), argon2id_p_cost()) {
+    match crypto.argon2id(bytes.from_str(candidate), bytes.from_str(salt), argon2id_t_cost(), argon2id_m_cost(), argon2id_out_len()) {
       Err(e) => Err(e),
       Ok(actual) => match crypto.hex_decode(expected_hex) {
         Err(e) => Err(e),
