@@ -113,7 +113,7 @@ fn test_derive_key_different_info() -> Bool {
 }
 
 # ---- Runner ------------------------------------------------------
-fn run_all() -> [random] Int {
+fn run_all_count() -> [random] Int {
   let cases := [test_argon2id_round_trip(), test_argon2id_wrong_password(), test_argon2id_two_hashes_differ(), test_argon2id_malformed_token(), test_pbkdf2_round_trip(), test_pbkdf2_wrong_password(), test_pbkdf2_malformed_token(), test_generic_argon2id(), test_generic_pbkdf2(), test_derive_key_deterministic(), test_derive_key_different_info()]
   list.fold(cases, 0, fn (n :: Int, ok :: Bool) -> Int {
     if ok {
@@ -122,5 +122,18 @@ fn run_all() -> [random] Int {
       n + 1
     }
   })
+}
+
+# `lex test` calls `run_all` and DISCARDS what it returns (lex-lang#757), so a
+# returned failure count reports `ok` however many assertions failed. Only a
+# raise fails a file — the same idiom lex-ems, lex-web and lex-guard use.
+# Run `run_all_count` directly to see which assertions failed.
+fn run_all() -> [random] Unit {
+  if run_all_count() == 0 {
+    ()
+  } else {
+    let __boom := 1 / 0
+    ()
+  }
 }
 
