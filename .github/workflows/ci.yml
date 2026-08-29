@@ -19,7 +19,7 @@ env:
   # Pinned lex toolchain version. Update here when lex-lang ships a new
   # release that lex-schema depends on.
   # v0.9.13 is the first release with str.char_at, which the O(n) parser needs.
-  LEX_VERSION: "v0.10.12"
+  LEX_VERSION: "v0.10.13"
 
 jobs:
   check:
