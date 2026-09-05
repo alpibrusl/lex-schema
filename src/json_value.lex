@@ -416,7 +416,7 @@ fn parse_string_raw(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
   if char_at(src, p) != "\"" {
     Err({ pos: p, message: "expected `\"`" })
   } else {
-    str_loop(src, p + 1, p + 1, "")
+    str_loop(src, p + 1, p + 1, [])
   }
 }
 
@@ -427,22 +427,29 @@ fn parse_string_raw(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
 # per character and hit the 10M-step budget on ~200 KB of string
 # content (lex-lang#768). Indices are byte offsets because
 # `sanitise_multibyte` has already made the input single-byte.
-fn str_loop(src :: Str, chunk_start :: Int, p :: Int, acc :: Str) -> Result[StringStep, ParseErr] {
+#
+# `acc` accumulates chunks via `list.cons` (O(1) each) instead of
+# `str.concat` (which copies both operands, making the old
+# accumulation O(n^2) in the number of escapes — flagged but left
+# unfixed by #31: "a string with an escape every few characters is
+# quadratic... a chunk list would be the fix"). Reproduced live: an
+# agent's normal, unremarkable conversation history — nothing
+# adversarial, no single huge value, just many turns of ordinary
+# escape-dense text — hit the 10M-step budget in this exact function
+# by growing large enough for `str.concat`'s copying to dominate.
+# `list.reverse` + `str.join` run once, at the closing quote, not on
+# every escape.
+fn str_loop(src :: Str, chunk_start :: Int, p :: Int, acc :: List[Str]) -> Result[StringStep, ParseErr] {
   match str.find_any(src, "\"\\", p) {
     None => Err({ pos: str.len(src), message: "unterminated string" }),
     Some(q) => {
-      let chunk := str.slice(src, chunk_start, q)
-      let acc2 := if str.is_empty(acc) {
-        chunk
-      } else {
-        str.concat(acc, chunk)
-      }
+      let acc2 := list.cons(str.slice(src, chunk_start, q), acc)
       if char_at(src, q) == "\"" {
-        Ok({ pos: q + 1, text: acc2 })
+        Ok({ pos: q + 1, text: str.join(list.reverse(acc2), "") })
       } else {
         match parse_escape(src, q + 1) {
           Err(e1) => Err(e1),
-          Ok(s) => str_loop(src, s.pos, s.pos, str.concat(acc2, s.text)),
+          Ok(s) => str_loop(src, s.pos, s.pos, list.cons(s.text, acc2)),
         }
       }
     },
