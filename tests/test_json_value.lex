@@ -110,6 +110,28 @@ fn parse_large_string() -> Result[Unit, Str] {
   }
 }
 
+# Regression: str_loop's accumulator used to grow via str.concat, which
+# copies both operands on every escape -- O(n^2) in the number of escapes,
+# not the string's length (`parse_large_string` above has no escapes at
+# all, so it never exercised this path). This size is a correctness check,
+# not a timing one -- CI shouldn't assert wall-clock. The PR that added
+# this measured the actual regression directly: at 80,000 escapes, the old
+# accumulator took ~50s and panicked with step limit exceeded; the new one
+# parses the same input in ~0.5s. Doubling a 3-char seed containing one
+# escape (`a\n`) grows the escape count exponentially without an O(n^2)
+# builder in the test itself, same trick as parse_large_string.
+fn parse_escape_dense_string() -> Result[Unit, Str] {
+  let body := repeat_pow2("a\\n", 14)
+  match jv.parse(str.concat("\"", str.concat(body, "\""))) {
+    Ok(JStr(s)) => if str.len(s) == 32768 {
+      Ok(())
+    } else {
+      Err(str.concat("wrong length: ", int.to_str(str.len(s))))
+    },
+    _ => Err("escape-dense string did not parse"),
+  }
+}
+
 # ---- Parser: containers -------------------------------------------
 fn parse_empty_array() -> Result[Unit, Str] {
   match jv.parse("[]") {
@@ -282,7 +304,7 @@ fn j_optional_present_ok() -> Result[Unit, Str] {
 
 # ---- Suite --------------------------------------------------------
 fn suite() -> List[Result[Unit, Str]] {
-  [parse_null(), parse_true(), parse_false(), parse_int_positive(), parse_int_negative(), parse_float(), parse_string(), parse_string_with_escape(), parse_b_f_escapes(), parse_large_string(), parse_empty_array(), parse_array_mixed(), parse_empty_object(), parse_object_nested(), parse_whitespace_tolerant(), parse_unterminated_string(), parse_garbage(), parse_trailing_garbage(), j_str_field_present(), j_str_missing_field(), j_str_type_error(), j_int_with_constraint(), j_optional_absent_ok(), j_optional_null_ok(), j_optional_present_ok()]
+  [parse_null(), parse_true(), parse_false(), parse_int_positive(), parse_int_negative(), parse_float(), parse_string(), parse_string_with_escape(), parse_b_f_escapes(), parse_large_string(), parse_escape_dense_string(), parse_empty_array(), parse_array_mixed(), parse_empty_object(), parse_object_nested(), parse_whitespace_tolerant(), parse_unterminated_string(), parse_garbage(), parse_trailing_garbage(), j_str_field_present(), j_str_missing_field(), j_str_type_error(), j_int_with_constraint(), j_optional_absent_ok(), j_optional_null_ok(), j_optional_present_ok()]
 }
 
 fn run_all_count() -> Int {
