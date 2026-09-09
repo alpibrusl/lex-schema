@@ -12,26 +12,22 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Check if version changed
-        id: ver
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            OLD=$(git show HEAD~1:lex.toml 2>/dev/null | grep '^version' | head -1 || echo "")
-            NEW=$(grep '^version' lex.toml | head -1)
-            [ "$OLD" != "$NEW" ] && echo "changed=true" >> $GITHUB_OUTPUT \
-                                  || echo "changed=false" >> $GITHUB_OUTPUT
-          fi
+      # No version-string gate here on purpose (there used to be one, keyed
+      # off whether lex.toml's `version` field changed between commits --
+      # removed because it silently no-op'd every push for months: real
+      # commits landed without ever bumping `version`, so the gate always
+      # evaluated false, and the job still reported success in under 10s
+      # every time. lex-hub's store is content-addressed, so republishing
+      # unchanged functions creates no new operations -- running this
+      # unconditionally on every push to main is safe and idempotent, and
+      # removes the whole class of bug rather than just narrowing it.
 
       - name: Install lex
-        if: steps.ver.outputs.changed == 'true'
         run: |
           curl -fsSL "https://github.com/alpibrusl/lex-lang/releases/download/v0.10.18/lex-v0.10.18-x86_64-unknown-linux-gnu.tar.gz" \
             | tar -xz --strip-components=1 -C /usr/local/bin
 
       - name: Mint JWT + publish
-        if: steps.ver.outputs.changed == 'true'
         env:
           LEXHUB_ADMIN_SECRET: ${{ secrets.LEXHUB_ADMIN_SECRET }}
         run: |
@@ -42,7 +38,6 @@ jobs:
           lex pkg publish --registry https://vcs.lexlang.org --token "$JWT"
 
       - name: Set visibility public
-        if: steps.ver.outputs.changed == 'true'
         env:
           LEXHUB_ADMIN_SECRET: ${{ secrets.LEXHUB_ADMIN_SECRET }}
         run: |
