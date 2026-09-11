@@ -1,6 +1,6 @@
 [package]
 name        = "lex-schema"
-version     = "0.9.6"
+version     = "0.9.7"
 lex         = "0.10.18"
 description = "Pydantic-style runtime validation, codegen, and schema utilities for Lex."
 registry    = "https://lexhub.alpibru.com"
