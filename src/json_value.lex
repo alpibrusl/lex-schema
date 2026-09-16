@@ -27,6 +27,8 @@ import "std.float" as float
 
 import "std.list" as list
 
+import "std.bytes" as bytes
+
 import "./error" as e
 
 import "./constraints" as c
@@ -946,6 +948,56 @@ fn stringify_at(j :: Json, depth :: Int) -> Str {
 # accumulator on every step and was O(n²), and a per-char `list.map`
 # still spends VM steps per char, which exhausts the step budget on a
 # ~500 K char string (lex-lang#768).
+fn hex_digit(d :: Int) -> Str {
+  match d {
+    0 => "0",
+    1 => "1",
+    2 => "2",
+    3 => "3",
+    4 => "4",
+    5 => "5",
+    6 => "6",
+    7 => "7",
+    8 => "8",
+    9 => "9",
+    10 => "a",
+    11 => "b",
+    12 => "c",
+    13 => "d",
+    14 => "e",
+    _ => "f",
+  }
+}
+
+# The 1-character string for byte `n` (0..255). Control bytes 0x00-0x1f are
+# valid single-byte UTF-8, so `to_str` always succeeds here.
+fn char_of_byte(n :: Int) -> Str {
+  match bytes.to_str(bytes.u8(n)) {
+    Ok(c) => c,
+    Err(_) => "",
+  }
+}
+
+# JSON (RFC 8259 §7) requires EVERY control character U+0000-U+001F to be
+# escaped. The fast replace chain above only covers `"` `\` `\n` `\r` `\t`;
+# a raw ESC / form-feed / NUL (common in bash, grep, ANSI-coloured tool
+# output) would otherwise be emitted verbatim, producing a string that
+# `json.dumps`, Ollama's `/api/chat`, and any strict JSON parser reject as
+# an invalid control character (this is exactly what 400'd local qwen tool
+# turns after a tool result carried an ANSI escape). Escape the remaining
+# 0x00-0x08, 0x0b, 0x0c, 0x0e-0x1f to `\u00XX`. One native `str.replace`
+# per code point, so still O(n); done last so the `\` in `\u00XX` isn't
+# re-escaped by the backslash pass.
+fn escape_controls(s :: Str) -> Str {
+  list.fold(list.range(0, 32), s, fn (acc :: Str, n :: Int) -> Str {
+    if n == 9 or n == 10 or n == 13 {
+      acc
+    } else {
+      str.replace(acc, char_of_byte(n), str.concat("\\u00", str.concat(hex_digit(n / 16), hex_digit(n % 16))))
+    }
+  })
+}
+
 fn escape_str(s :: Str) -> Str
   examples {
     escape_str("plain") => "plain",
@@ -959,7 +1011,8 @@ fn escape_str(s :: Str) -> Str
   let s2 := str.replace(s1, "\"", "\\\"")
   let s3 := str.replace(s2, "\n", "\\n")
   let s4 := str.replace(s3, "\r", "\\r")
-  str.replace(s4, "\t", "\\t")
+  let s5 := str.replace(s4, "\t", "\\t")
+  escape_controls(s5)
 }
 
 fn indent_str(depth :: Int) -> Str {
