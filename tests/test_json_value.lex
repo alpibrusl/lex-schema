@@ -302,9 +302,76 @@ fn j_optional_present_ok() -> Result[Unit, Str] {
   }
 }
 
+# ---- Parser: UTF-8 ------------------------------------------------
+#
+# Non-ASCII used to be destroyed rather than parsed: every multi-byte
+# character was replaced with "?" before the scan, and every `\uXXXX` escape
+# above U+007E decoded to "?" as well. Both were workarounds for the scanner
+# mixing byte and character indexing (alpibrusl/lex-lang#890).
+#
+# These pin the behaviour that replaced them. They are written as
+# round-trips — parse a document, read the field back, compare to the literal
+# — so a regression that reinstates any lossy convention fails here rather
+# than silently corrupting text on its way through.
+fn utf8_field(doc :: Str, want :: Str, label :: Str) -> Result[Unit, Str] {
+  match jv.parse(doc) {
+    Err(_) => Err(str.concat("parse failed: ", label)),
+    Ok(j) => match jv.get_field(j, "k") {
+      Some(JStr(v)) => if v == want {
+        Ok(())
+      } else {
+        Err(str.join([label, ": got [", v, "] want [", want, "]"], ""))
+      },
+      _ => Err(str.concat("no string field k: ", label)),
+    },
+  }
+}
+
+fn parse_literal_multibyte() -> Result[Unit, Str] {
+  utf8_field("{\"k\":\"a—b 日本語 café 🐙\"}", "a—b 日本語 café 🐙", "literal multibyte")
+}
+
+fn parse_multibyte_with_escapes() -> Result[Unit, Str] {
+  utf8_field("{\"k\":\"—\\n—\\t—\"}", "—\n—\t—", "multibyte around escapes")
+}
+
+# A multi-byte character BEFORE an escape is the case that byte/character
+# confusion gets wrong: the escape is found at a character index, and a
+# byte-indexed read of it lands mid-sequence.
+fn parse_multibyte_before_escape() -> Result[Unit, Str] {
+  utf8_field("{\"k\":\"日本\\\"quoted\\\"\"}", "日本\"quoted\"", "multibyte before escape")
+}
+
+fn parse_u_escape_non_ascii() -> Result[Unit, Str] {
+  utf8_field("{\"k\":\"\\u00e9\\u2014\\u65e5\"}", "é—日", "\\u escape above U+007E")
+}
+
+# Above U+FFFF JSON uses a UTF-16 surrogate pair; decoding the halves
+# separately yields two values that are not encodable at all.
+fn parse_surrogate_pair() -> Result[Unit, Str] {
+  utf8_field("{\"k\":\"\\ud83d\\udc19!\"}", "🐙!", "surrogate pair")
+}
+
+# An unpaired surrogate is not a scalar value. U+FFFD is the standard
+# substitution; the point of pinning it is that it must not be silently
+# dropped or turned back into "?".
+fn parse_lone_surrogate() -> Result[Unit, Str] {
+  utf8_field("{\"k\":\"[\\ud83d]\"}", "[�]", "lone surrogate")
+}
+
+fn parse_multibyte_key() -> Result[Unit, Str] {
+  match jv.parse("{\"日本\":\"ok\"}") {
+    Err(_) => Err("parse failed: multibyte key"),
+    Ok(j) => match jv.get_field(j, "日本") {
+      Some(JStr("ok")) => Ok(()),
+      _ => Err("multibyte object key did not round-trip"),
+    },
+  }
+}
+
 # ---- Suite --------------------------------------------------------
 fn suite() -> List[Result[Unit, Str]] {
-  [parse_null(), parse_true(), parse_false(), parse_int_positive(), parse_int_negative(), parse_float(), parse_string(), parse_string_with_escape(), parse_b_f_escapes(), parse_large_string(), parse_escape_dense_string(), parse_empty_array(), parse_array_mixed(), parse_empty_object(), parse_object_nested(), parse_whitespace_tolerant(), parse_unterminated_string(), parse_garbage(), parse_trailing_garbage(), j_str_field_present(), j_str_missing_field(), j_str_type_error(), j_int_with_constraint(), j_optional_absent_ok(), j_optional_null_ok(), j_optional_present_ok()]
+  [parse_null(), parse_true(), parse_false(), parse_int_positive(), parse_int_negative(), parse_float(), parse_string(), parse_string_with_escape(), parse_b_f_escapes(), parse_large_string(), parse_escape_dense_string(), parse_empty_array(), parse_array_mixed(), parse_empty_object(), parse_object_nested(), parse_whitespace_tolerant(), parse_unterminated_string(), parse_garbage(), parse_trailing_garbage(), parse_literal_multibyte(), parse_multibyte_with_escapes(), parse_multibyte_before_escape(), parse_u_escape_non_ascii(), parse_surrogate_pair(), parse_lone_surrogate(), parse_multibyte_key(), j_str_field_present(), j_str_missing_field(), j_str_type_error(), j_int_with_constraint(), j_optional_absent_ok(), j_optional_null_ok(), j_optional_present_ok()]
 }
 
 fn run_all_count() -> Int {

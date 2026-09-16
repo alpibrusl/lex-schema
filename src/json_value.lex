@@ -47,35 +47,17 @@ type ParseStep = { pos :: Int, value :: Json }
 # ---- Public entry point -------------------------------------------
 # Parse a complete JSON document. Trailing whitespace is allowed
 # but trailing non-whitespace garbage is a parse error.
-# Replace any literal multi-byte (non-ASCII) character with "?" before
-# parsing. The scanner advances byte-by-byte while `str.len`/`str.slice`
-# disagree on char vs byte boundaries for multi-byte UTF-8, which made
-# `parse` fail on literal `—`, `→`, etc. inside strings. This mirrors the
-# existing `parse_into_errors` convention (non-ASCII BMP -> "?").
-fn sanitise_multibyte(src :: Str) -> Str {
-  str.join(list.map(str.split(src, ""), fn (ch :: Str) -> Str {
-    if str.len(ch) > 1 {
-      "?"
-    } else {
-      ch
-    }
-  }), "")
-}
-
-# ASCII input needs no sanitising, and `str.is_ascii` (lex >= 0.10.14)
-# decides that in one VM step; the per-char `sanitise_multibyte` pass
-# only runs for input that actually has multi-byte chars.
+# Multibyte input is parsed, not sanitised. Every non-ASCII character used to
+# be replaced with "?" before parsing, because the scanner mixed byte and
+# character indexing; with every position character-indexed, UTF-8 round-trips
+# (alpibrusl/lex-lang#890).
 fn parse(src :: Str) -> Result[Json, ParseErr] {
-  let safe := if str.is_ascii(src) {
-    src
-  } else {
-    sanitise_multibyte(src)
-  }
+  let safe := src
   match parse_value(safe, 0) {
     Err(e1) => Err(e1),
     Ok(step) => {
       let end := skip_ws(safe, step.pos)
-      if end == str.len(safe) {
+      if str.is_empty(char_at(safe, end)) {
         Ok(step.value)
       } else {
         Err({ pos: end, message: "trailing characters after JSON value" })
@@ -96,7 +78,7 @@ fn parse_into_errors(src :: Str) -> Result[Json, e.Errors] {
 # ---- Top-level value dispatch -------------------------------------
 fn parse_value(src :: Str, p :: Int) -> Result[ParseStep, ParseErr] {
   let p1 := skip_ws(src, p)
-  if p1 >= str.len(src) {
+  if str.is_empty(char_at(src, p1)) {
     Err({ pos: p1, message: "unexpected end of input" })
   } else {
     let c := char_at(src, p1)
@@ -130,7 +112,7 @@ fn is_json_ws(c :: Str) -> Bool {
 }
 
 fn skip_ws(src :: Str, p :: Int) -> Int {
-  if p >= str.len(src) {
+  if str.is_empty(char_at(src, p)) {
     p
   } else {
     if is_json_ws(char_at(src, p)) {
@@ -142,17 +124,18 @@ fn skip_ws(src :: Str, p :: Int) -> Int {
 }
 
 # ---- Keyword literals (true / false / null) -----------------------
+#
+# `true`/`false`/`null` are ASCII, so `str.len` (bytes) is also the character
+# length. `slice` clamps at the end of input, so a truncated tail simply fails
+# the comparison; no separate bounds check is needed, and adding one would mean
+# a whole-string length call in a hot path (see `char_len_slow`).
 fn parse_literal(src :: Str, p :: Int, word :: Str, value :: Json) -> Result[ParseStep, ParseErr] {
   let n := str.len(word)
-  if p + n > str.len(src) {
-    Err({ pos: p, message: str.concat("expected `", str.concat(word, "`")) })
+  let seen := str.slice(src, p, p + n)
+  if seen == word {
+    Ok({ pos: p + n, value: value })
   } else {
-    let seen := str.slice(src, p, p + n)
-    if seen == word {
-      Ok({ pos: p + n, value: value })
-    } else {
-      Err({ pos: p, message: str.concat("expected `", str.concat(word, "`")) })
-    }
+    Err({ pos: p, message: str.concat("expected `", str.concat(word, "`")) })
   }
 }
 
@@ -210,7 +193,7 @@ fn parse_number(src :: Str, p :: Int) -> Result[ParseStep, ParseErr] {
 }
 
 fn skip_digits(src :: Str, p :: Int) -> Int {
-  if p >= str.len(src) {
+  if str.is_empty(char_at(src, p)) {
     p
   } else {
     let c := char_at(src, p)
@@ -281,120 +264,54 @@ fn hex_to_int(h :: Str) -> Int
   }
 }
 
-# Map a Unicode BMP code point to a Lex Str. ASCII 0-126 are returned
-# directly; anything above U+007E becomes "?" — same convention as
-# the multi-byte sanitiser in parse_into_errors.
-fn codepoint_to_ascii_str(cp :: Int) -> Str
+# Encode a Unicode scalar value as UTF-8.
+#
+# This replaces a lookup table that returned ASCII directly and mapped EVERY
+# code point above U+007E to "?", so `\u00e9` came back as `?` rather than
+# `é`. That was the same "destroy it rather than fail" convention as the old
+# multi-byte sanitiser, and it is no longer needed: with the scanner
+# character-indexed, the parser can return the real character
+# (alpibrusl/lex-lang#890).
+#
+# The table is not replaced with a bigger table — `bytes.u8(cp)` already gives
+# the right byte for ASCII, so every one of its arms was an identity mapping.
+#
+# Division and remainder stand in for shift and mask: `cp / 64` is `cp >> 6`
+# and `cp % 64` is `cp & 0x3F`, which is the arithmetic UTF-8 is defined in.
+# An unpaired surrogate encodes to bytes that are not valid UTF-8; `to_str`
+# rejects them and U+FFFD, the standard replacement character, is substituted
+# rather than silently emitting something else.
+fn codepoint_to_str(cp :: Int) -> Str
   examples {
-    codepoint_to_ascii_str(60) => "<",
-    codepoint_to_ascii_str(62) => ">",
-    codepoint_to_ascii_str(38) => "&",
-    codepoint_to_ascii_str(32) => " ",
-    codepoint_to_ascii_str(9000) => "?"
+    codepoint_to_str(60) => "<",
+    codepoint_to_str(32) => " ",
+    codepoint_to_str(233) => "é",
+    codepoint_to_str(8212) => "—",
+    codepoint_to_str(128025) => "🐙"
   }
 {
-  match cp {
-    0 => " ",
-    9 => "\t",
-    10 => "\n",
-    13 => "\r",
-    32 => " ",
-    33 => "!",
-    34 => "\"",
-    35 => "#",
-    36 => "$",
-    37 => "%",
-    38 => "&",
-    39 => "'",
-    40 => "(",
-    41 => ")",
-    42 => "*",
-    43 => "+",
-    44 => ",",
-    45 => "-",
-    46 => ".",
-    47 => "/",
-    48 => "0",
-    49 => "1",
-    50 => "2",
-    51 => "3",
-    52 => "4",
-    53 => "5",
-    54 => "6",
-    55 => "7",
-    56 => "8",
-    57 => "9",
-    58 => ":",
-    59 => ";",
-    60 => "<",
-    61 => "=",
-    62 => ">",
-    63 => "?",
-    64 => "@",
-    65 => "A",
-    66 => "B",
-    67 => "C",
-    68 => "D",
-    69 => "E",
-    70 => "F",
-    71 => "G",
-    72 => "H",
-    73 => "I",
-    74 => "J",
-    75 => "K",
-    76 => "L",
-    77 => "M",
-    78 => "N",
-    79 => "O",
-    80 => "P",
-    81 => "Q",
-    82 => "R",
-    83 => "S",
-    84 => "T",
-    85 => "U",
-    86 => "V",
-    87 => "W",
-    88 => "X",
-    89 => "Y",
-    90 => "Z",
-    91 => "[",
-    92 => "\\",
-    93 => "]",
-    94 => "^",
-    95 => "_",
-    96 => "`",
-    97 => "a",
-    98 => "b",
-    99 => "c",
-    100 => "d",
-    101 => "e",
-    102 => "f",
-    103 => "g",
-    104 => "h",
-    105 => "i",
-    106 => "j",
-    107 => "k",
-    108 => "l",
-    109 => "m",
-    110 => "n",
-    111 => "o",
-    112 => "p",
-    113 => "q",
-    114 => "r",
-    115 => "s",
-    116 => "t",
-    117 => "u",
-    118 => "v",
-    119 => "w",
-    120 => "x",
-    121 => "y",
-    122 => "z",
-    123 => "{",
-    124 => "|",
-    125 => "}",
-    126 => "~",
-    _ => "?",
+  let bs := if cp < 128 {
+    [bytes.u8(cp)]
+  } else {
+    if cp < 2048 {
+      [bytes.u8(192 + cp / 64), bytes.u8(128 + cp % 64)]
+    } else {
+      if cp < 65536 {
+        [bytes.u8(224 + cp / 4096), bytes.u8(128 + cp / 64 % 64), bytes.u8(128 + cp % 64)]
+      } else {
+        [bytes.u8(240 + cp / 262144), bytes.u8(128 + cp / 4096 % 64), bytes.u8(128 + cp / 64 % 64), bytes.u8(128 + cp % 64)]
+      }
+    }
   }
+  match bytes.to_str(bytes.concat_all(bs)) {
+    Err(_) => "�",
+    Ok(t) => t,
+  }
+}
+
+# The four hex digits of a `\uXXXX` escape whose backslash-u sits at `p`.
+fn hex4(src :: Str, p :: Int) -> Int {
+  hex_to_int(char_at(src, p + 1)) * 4096 + hex_to_int(char_at(src, p + 2)) * 256 + hex_to_int(char_at(src, p + 3)) * 16 + hex_to_int(char_at(src, p + 4))
 }
 
 # ---- Strings ------------------------------------------------------
@@ -443,7 +360,7 @@ fn parse_string_raw(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
 # every escape.
 fn str_loop(src :: Str, chunk_start :: Int, p :: Int, acc :: List[Str]) -> Result[StringStep, ParseErr] {
   match str.find_any(src, "\"\\", p) {
-    None => Err({ pos: str.len(src), message: "unterminated string" }),
+    None => Err({ pos: char_len_slow(src), message: "unterminated string" }),
     Some(q) => {
       let acc2 := list.cons(str.slice(src, chunk_start, q), acc)
       if char_at(src, q) == "\"" {
@@ -458,8 +375,14 @@ fn str_loop(src :: Str, chunk_start :: Int, p :: Int, acc :: List[Str]) -> Resul
   }
 }
 
+# SURROGATE PAIRS. Anything above U+FFFF reaches JSON as a UTF-16 surrogate
+# PAIR — an octopus is "\\uD83D\\uDC19". Decoding the halves independently
+# yields two unpaired surrogates, which are not Unicode scalar values and do
+# not encode, so `\\u` recombines a high surrogate with the low one that
+# follows it. A high surrogate NOT followed by a low one is left alone and
+# becomes U+FFFD.
 fn parse_escape(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
-  if p >= str.len(src) {
+  if str.is_empty(char_at(src, p)) {
     Err({ pos: p, message: "unterminated escape" })
   } else {
     let c := char_at(src, p)
@@ -472,15 +395,20 @@ fn parse_escape(src :: Str, p :: Int) -> Result[StringStep, ParseErr] {
       "t" => Ok({ pos: p + 1, text: "\t" }),
       "b" => Ok({ pos: p + 1, text: "" }),
       "f" => Ok({ pos: p + 1, text: "" }),
-      "u" => if p + 4 >= str.len(src) {
+      "u" => if str.is_empty(char_at(src, p + 4)) {
         Err({ pos: p, message: "incomplete \\uXXXX escape" })
       } else {
-        let h1 := char_at(src, p + 1)
-        let h2 := char_at(src, p + 2)
-        let h3 := char_at(src, p + 3)
-        let h4 := char_at(src, p + 4)
-        let cp := hex_to_int(h1) * 4096 + hex_to_int(h2) * 256 + hex_to_int(h3) * 16 + hex_to_int(h4)
-        Ok({ pos: p + 5, text: codepoint_to_ascii_str(cp) })
+        let cp := hex4(src, p)
+        if cp >= 55296 and cp <= 56319 and char_at(src, p + 5) == "\\" and char_at(src, p + 6) == "u" and not str.is_empty(char_at(src, p + 10)) {
+          let lo := hex4(src, p + 6)
+          if lo >= 56320 and lo <= 57343 {
+            Ok({ pos: p + 11, text: codepoint_to_str(65536 + (cp - 55296) * 1024 + (lo - 56320)) })
+          } else {
+            Ok({ pos: p + 5, text: codepoint_to_str(cp) })
+          }
+        } else {
+          Ok({ pos: p + 5, text: codepoint_to_str(cp) })
+        }
       },
       _ => Err({ pos: p, message: str.concat("invalid escape `\\", str.concat(c, "`")) }),
     }
@@ -561,23 +489,50 @@ fn object_loop(src :: Str, p :: Int, acc :: List[(Str, Json)]) -> Result[ParseSt
 
 # ---- Character helpers --------------------------------------------
 # Return the char at position `p` as a single-char `Str`, or "" past the end.
-# Uses `str.char_at` (O(1)) rather than `str.slice(src, p, p+1)` whose codepoint
-# index resolves via `char_indices().nth(p)` — O(p) — which made the whole parse
-# O(n²) (and blew the VM step limit on large inputs). `sanitise_multibyte` has
-# already collapsed every multi-byte char to a single ASCII byte, so direct byte
-# indexing is correct here.
+#
+# CHARACTER-indexed, not byte-indexed. `std.str` mixes the two conventions and
+# says so in its own spec: `len` and `char_at` count BYTES, while `slice`,
+# `find`, `find_any` and `split` count CHARACTERS (alpibrusl/lex-lang#890).
+# This scanner takes its positions from `find_any` and extracts with `slice`,
+# so every position here is a character index; reading with `str.char_at` was
+# the one byte-indexed step, and on multibyte input it landed mid-sequence and
+# returned "". That is why `parse` used to fail on a literal em dash, and why
+# the old workaround replaced non-ASCII with "?" rather than fail.
+#
+# On cost, since an earlier comment here had it wrong and the wrong version is
+# what forced the "?" workaround: `str.slice` is NOT O(p) from the start of the
+# string. Its documented cost is the distance from the previous slice or find
+# on the same string, so a scan that only ever moves FORWARD is O(1) amortised
+# per character. Measured: single-character slices walking a string forward are
+# linear (2K/8K/32K chars -> 1/4/17 ms), while touching an earlier position
+# between reads is quadratic (2K/8K -> 2/23 ms).
+#
+# The rule this imposes on the scanner is therefore: never look backwards.
+# Extract a run before probing past its end, and never call a whole-string
+# length function from a bounds check — see `char_len_slow`.
 fn char_at(src :: Str, p :: Int) -> Str {
-  str.char_at(src, p)
+  str.slice(src, p, p + 1)
+}
+
+# End-of-input position in CHARACTERS, for error messages only.
+#
+# O(n) time AND O(n) allocation: it splits the whole document into a list of
+# one-character strings. Calling it from a bounds check — once per character
+# scanned — is what made `parse` quadratic; a 4x larger escape-dense input
+# took 47x longer, and large documents hit the 10M-step budget outright.
+#
+# The scanner must never call this. Bounds checks use `char_at` instead:
+# `str.slice` clamps, so an index at or past the end yields "", which is an
+# exact end-of-input test in O(1). This remains only on error paths, which
+# run once and then stop parsing.
+fn char_len_slow(src :: Str) -> Int {
+  list.len(str.split(src, ""))
 }
 
 # Like `char_at`, but past-the-end returns `""` instead of erroring.
 # Lets dispatch sites use `match` directly on the result.
 fn peek_char(src :: Str, p :: Int) -> Str {
-  if p >= str.len(src) {
-    ""
-  } else {
-    char_at(src, p)
-  }
+  char_at(src, p)
 }
 
 # ============================================================
