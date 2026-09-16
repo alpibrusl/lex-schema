@@ -111,30 +111,30 @@ fn parse_value(src :: Str, p :: Int) -> Result[ParseStep, ParseErr] {
 }
 
 # ---- Whitespace ---------------------------------------------------
-# One recursive call per whitespace CHARACTER used to cost one
-# interpreter step per character — fine for the few spaces between
-# tokens, but a document with a long run of whitespace (a large
-# indented/pretty-printed JSON blob, or one with padding) could exceed
-# the VM's step budget and panic instead of returning a ParseErr. This
-# does the same trim in a constant number of host calls: str.trim
-# already strips both ends in one step, and str.find locates where the
-# untrimmed prefix ends. `trimmed`'s first character is guaranteed
-# non-whitespace (or `trimmed` is empty), so no whitespace-only prefix
-# of `rest` can produce a false earlier match — the found offset is
-# always the true length of the leading run.
+# Advance the cursor past a run of JSON whitespace (RFC 8259 §2: space,
+# tab, LF, CR — nothing else). One tail-recursive step per whitespace
+# character, each an O(1) `char_at`; the run between tokens is tiny, so
+# this is O(total whitespace) = O(n) across the document with ZERO string
+# copies.
+#
+# It must stay this way. A previous "optimization" sliced the whole
+# remaining input (`str.slice(src, p, len)`) on every call and trimmed it
+# — O(n) copied bytes per token, which made the whole parser O(n²): a
+# ~1MB pretty-printed document took 193s of CPU and then blew the
+# 10M-step limit instead of returning. `skip_digits` right below uses
+# this same cursor pattern; keep them consistent.
+fn is_json_ws(c :: Str) -> Bool {
+  c == " " or c == "\t" or c == "\n" or c == "\r"
+}
+
 fn skip_ws(src :: Str, p :: Int) -> Int {
   if p >= str.len(src) {
     p
   } else {
-    let rest := str.slice(src, p, str.len(src))
-    let trimmed := str.trim(rest)
-    if str.is_empty(trimmed) {
-      str.len(src)
+    if is_json_ws(char_at(src, p)) {
+      skip_ws(src, p + 1)
     } else {
-      match str.find(rest, trimmed, 0) {
-        Some(offset) => p + offset,
-        None => p,
-      }
+      p
     }
   }
 }
